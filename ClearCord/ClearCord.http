@@ -1,0 +1,151 @@
+@host = https://localhost:5001
+@token = REPLACE_WITH_JWT
+@serverId = 11111111-1111-1111-1111-111111111111
+@channelId = 22222222-2222-2222-2222-222222222222
+@messageId = 33333333-3333-3333-3333-333333333333
+@roleId = 44444444-4444-4444-4444-444444444444
+@friendRequestId = 55555555-5555-5555-5555-555555555555
+
+### Register
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "userName": "alex",
+  "displayName": "Alex Clear",
+  "email": "alex@example.com",
+  "password": "Password123"
+}
+
+### Login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "emailOrUserName": "alex@example.com",
+  "password": "Password123"
+}
+
+### Get current profile
+GET {{host}}/api/users/me
+Authorization: Bearer {{token}}
+
+### Search users
+GET {{host}}/api/users/search?term=alex
+Authorization: Bearer {{token}}
+
+### Send friend request
+POST {{host}}/api/friends/requests
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "targetUserId": "target-user-id"
+}
+
+### Accept friend request
+POST {{host}}/api/friends/requests/{{friendRequestId}}/accept
+Authorization: Bearer {{token}}
+
+### Create server
+POST {{host}}/api/servers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "ClearCord Devs",
+  "description": "Backend collaboration space"
+}
+
+### Create custom role
+POST {{host}}/api/servers/{{serverId}}/roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Support",
+  "colorHex": "#22C55E",
+  "permissions": [ "ViewChannels", "SendMessages", "ConnectToVoice" ],
+  "isDefault": false
+}
+
+### Assign role
+POST {{host}}/api/servers/{{serverId}}/roles/{{roleId}}/assign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": "target-user-id"
+}
+
+### Create category
+POST {{host}}/api/servers/{{serverId}}/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Sprint Room",
+  "position": 3
+}
+
+### Create text channel
+POST {{host}}/api/servers/{{serverId}}/channels
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "backend-chat",
+  "type": "Text",
+  "categoryId": null,
+  "topic": "API implementation",
+  "position": 4
+}
+
+### Get channel messages
+GET {{host}}/api/channels/{{channelId}}/messages?page=1&pageSize=50
+Authorization: Bearer {{token}}
+
+### Send message with multipart form data
+POST {{host}}/api/channels/{{channelId}}/messages
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=ClearCordBoundary
+
+--ClearCordBoundary
+Content-Disposition: form-data; name="Content"
+
+Hello from ClearCord
+--ClearCordBoundary--
+
+### Update message
+PUT {{host}}/api/messages/{{messageId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "content": "Edited message content"
+}
+
+### Add emoji reaction
+POST {{host}}/api/messages/{{messageId}}/reactions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "emoji": ":fire:"
+}
+
+### Join voice channel over REST
+POST {{host}}/api/channels/{{channelId}}/voice/join
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "connectionId": "signalr-connection-id",
+  "isMuted": false,
+  "isCameraEnabled": true,
+  "isScreenSharing": false
+}
+
+### Get notifications
+GET {{host}}/api/notifications
+Authorization: Bearer {{token}}

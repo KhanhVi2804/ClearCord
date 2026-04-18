@@ -6,9 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>937aacb9-fd81-4f10-9efb-68ab02ad4a1d</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <FrontendRoot>..\ClearCord.Frontend\</FrontendRoot>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="8.0.0" />
@@ -20,5 +22,18 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
     <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.23" />
   </ItemGroup>
+
+  <Target Name="EnsureFrontendDependencies"
+          BeforeTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' and Exists('$(FrontendRoot)package.json') and !Exists('$(FrontendRoot)node_modules')">
+    <Exec WorkingDirectory="$(FrontendRoot)" Command="npm install" />
+  </Target>
+
+  <Target Name="BuildFrontend"
+          BeforeTargets="Build"
+          DependsOnTargets="EnsureFrontendDependencies"
+          Condition="'$(DesignTimeBuild)' != 'true' and Exists('$(FrontendRoot)package.json')">
+    <Exec WorkingDirectory="$(FrontendRoot)" Command="npm run build" />
+  </Target>
 
 </Project>
