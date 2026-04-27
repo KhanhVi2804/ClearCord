@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.IO;
 using System.Text;
 using System.Text.Json.Serialization;
 using ClearCord.Configuration;
@@ -15,7 +16,18 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
-var builder = WebApplication.CreateBuilder(args);
+var applicationBasePath = AppContext.BaseDirectory;
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = applicationBasePath,
+    WebRootPath = Path.Combine(applicationBasePath, "wwwroot")
+});
+
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+builder.Logging.AddEventSourceLogger();
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
@@ -138,7 +150,10 @@ builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
 var app = builder.Build();
 
 app.UseMiddleware<ApiExceptionMiddleware>();
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
 app.UseCors("ClearCordClient");
 app.UseAuthentication();

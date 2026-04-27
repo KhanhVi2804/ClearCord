@@ -46,7 +46,8 @@ function MessageItem({
   onSaveEdit,
   onDelete,
   onTogglePin,
-  onToggleReaction
+  onToggleReaction,
+  onViewProfile
 }) {
   const [editDraft, setEditDraft] = useState(message.content || "");
   const sender = message.sender ?? {};
@@ -66,17 +67,28 @@ function MessageItem({
 
   return (
     <article className={`message-item ${isOwnMessage ? "own" : ""}`}>
-      <div className="avatar-badge message-avatar">
+      <button
+        type="button"
+        className="avatar-badge message-avatar message-profile-trigger"
+        onClick={() => onViewProfile?.(sender.id)}
+        aria-label={`View ${sender.displayName || sender.userName || "user"} profile`}
+      >
         {sender.avatarUrl ? (
           <img src={toAssetUrl(sender.avatarUrl)} alt={sender.displayName} className="avatar-image" />
         ) : (
           <span>{initials}</span>
         )}
-      </div>
+      </button>
 
       <div className="message-body">
         <div className="message-meta">
-          <strong>{sender.displayName || sender.userName || "Unknown user"}</strong>
+          <button
+            type="button"
+            className="message-author-button"
+            onClick={() => onViewProfile?.(sender.id)}
+          >
+            {sender.displayName || sender.userName || "Unknown user"}
+          </button>
           <span>{formatTime(message.createdAt)}</span>
           {message.isEdited && <em>edited</em>}
           {message.isPinned && <span className="mini-pill">pinned</span>}

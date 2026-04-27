@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import ModalShell from "./ModalShell";
 
 const PERMISSION_OPTIONS = [
   "ViewChannels",
@@ -221,6 +222,9 @@ function AdminPanel({
     userId: "",
     roleId: ""
   });
+  const [serverAction, setServerAction] = useState(null);
+  const [moderationDialog, setModerationDialog] = useState(null);
+  const [moderationReason, setModerationReason] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -276,6 +280,11 @@ function AdminPanel({
     } catch (requestError) {
       setError(requestError.message);
     }
+  }
+
+  function closeModerationDialog() {
+    setModerationDialog(null);
+    setModerationReason("");
   }
 
   return (
@@ -350,11 +359,7 @@ function AdminPanel({
             <button
               type="button"
               className="ghost-button"
-              onClick={() => {
-                if (window.confirm("Leave this server?")) {
-                  runAction(() => onLeaveServer(server.id));
-                }
-              }}
+              onClick={() => setServerAction("leave")}
             >
               Leave server
             </button>
@@ -363,11 +368,7 @@ function AdminPanel({
               type="button"
               className="ghost-button danger"
               disabled={!canManageServer}
-              onClick={() => {
-                if (window.confirm("Delete this server permanently?")) {
-                  runAction(() => onDeleteServer(server.id));
-                }
-              }}
+              onClick={() => setServerAction("delete")}
             >
               Delete server
             </button>
@@ -772,10 +773,10 @@ function AdminPanel({
                       type="button"
                       className="ghost-button compact"
                       onClick={() => {
-                        const reason = window.prompt("Kick reason (optional):", "") ?? "";
-                        runAction(async () => {
-                          await onKickMember(server.id, member.userId, reason);
-                          setSuccess("Member kicked.");
+                        setModerationReason("");
+                        setModerationDialog({
+                          action: "kick",
+                          member
                         });
                       }}
                     >
@@ -788,10 +789,10 @@ function AdminPanel({
                       type="button"
                       className="ghost-button compact danger"
                       onClick={() => {
-                        const reason = window.prompt("Ban reason (optional):", "") ?? "";
-                        runAction(async () => {
-                          await onBanMember(server.id, member.userId, reason);
-                          setSuccess("Member banned.");
+                        setModerationReason("");
+                        setModerationDialog({
+                          action: "ban",
+                          member
                         });
                       }}
                     >
@@ -807,6 +808,93 @@ function AdminPanel({
 
       {error && <p className="form-error">{error}</p>}
       {success && <p className="form-success">{success}</p>}
+
+      {serverAction && (
+        <ModalShell
+          title={serverAction === "delete" ? "Delete server" : "Leave server"}
+          subtitle="Confirmation"
+          onClose={() => setServerAction(null)}
+        >
+          <div className="auth-stack">
+            <p className="muted-copy">
+              {serverAction === "delete"
+                ? "This permanently removes the server and its channels."
+                : "You will leave this server and lose direct access until you join again."}
+            </p>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className={`primary-button ${serverAction === "delete" ? "danger-action" : ""}`}
+                onClick={() =>
+                  runAction(async () => {
+                    if (serverAction === "delete") {
+                      await onDeleteServer(server.id);
+                    } else {
+                      await onLeaveServer(server.id);
+                    }
+
+                    setServerAction(null);
+                  })
+                }
+              >
+                {serverAction === "delete" ? "Delete server" : "Leave server"}
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setServerAction(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {moderationDialog && (
+        <ModalShell
+          title={moderationDialog.action === "ban" ? "Ban member" : "Kick member"}
+          subtitle="Moderation"
+          onClose={closeModerationDialog}
+        >
+          <form
+            className="auth-stack"
+            onSubmit={(event) => {
+              event.preventDefault();
+              runAction(async () => {
+                if (moderationDialog.action === "ban") {
+                  await onBanMember(server.id, moderationDialog.member.userId, moderationReason);
+                  setSuccess("Member banned.");
+                } else {
+                  await onKickMember(server.id, moderationDialog.member.userId, moderationReason);
+                  setSuccess("Member kicked.");
+                }
+
+                closeModerationDialog();
+              });
+            }}
+          >
+            <p className="muted-copy">
+              {moderationDialog.member.displayName} will be {moderationDialog.action === "ban" ? "banned from" : "removed from"} this server.
+            </p>
+
+            <label>
+              Reason
+              <textarea
+                value={moderationReason}
+                onChange={(event) => setModerationReason(event.target.value)}
+                rows={4}
+                placeholder="Optional moderation note"
+              />
+            </label>
+
+            <div className="inline-actions">
+              <button type="submit" className="primary-button danger-action">
+                {moderationDialog.action === "ban" ? "Ban member" : "Kick member"}
+              </button>
+              <button type="button" className="ghost-button" onClick={closeModerationDialog}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </ModalShell>
+      )}
     </section>
   );
 }

@@ -23,7 +23,8 @@ function ChatBox({
   onSaveEditMessage,
   onDeleteMessage,
   onTogglePinMessage,
-  onToggleReaction
+  onToggleReaction,
+  onViewUserProfile
 }) {
   const [draft, setDraft] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -187,6 +188,7 @@ function ChatBox({
                   onDelete={onDeleteMessage}
                   onTogglePin={onTogglePinMessage}
                   onToggleReaction={onToggleReaction}
+                  onViewProfile={onViewUserProfile}
                 />
               </div>
             );

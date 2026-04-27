@@ -41,7 +41,8 @@ function FriendsPanel({
   onSendRequest,
   onAcceptRequest,
   onRejectRequest,
-  onUnfriend
+  onUnfriend,
+  onViewProfile
 }) {
   return (
     <section className="feature-panel">
@@ -74,6 +75,13 @@ function FriendsPanel({
               >
                 <button
                   type="button"
+                  className="ghost-button compact"
+                  onClick={() => onViewProfile?.(user.id)}
+                >
+                  View profile
+                </button>
+                <button
+                  type="button"
                   className="primary-button compact"
                   onClick={() => onSendRequest(user.id)}
                 >
@@ -97,6 +105,13 @@ function FriendsPanel({
                 user={request.user}
                 subtitle={request.status}
               >
+                <button
+                  type="button"
+                  className="ghost-button compact"
+                  onClick={() => onViewProfile?.(request.user.id)}
+                >
+                  View profile
+                </button>
                 <button
                   type="button"
                   className="primary-button compact"
@@ -136,6 +151,13 @@ function FriendsPanel({
                 }}
                 subtitle={friend.isOnline ? "online" : "offline"}
               >
+                <button
+                  type="button"
+                  className="ghost-button compact"
+                  onClick={() => onViewProfile?.(friend.userId)}
+                >
+                  View profile
+                </button>
                 <button
                   type="button"
                   className="ghost-button compact"

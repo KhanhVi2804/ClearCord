@@ -7,6 +7,7 @@ import ModalShell from "../components/ModalShell";
 import NotificationsPanel from "../components/NotificationsPanel";
 import ProfilePanel from "../components/ProfilePanel";
 import Sidebar from "../components/Sidebar";
+import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
 import WorkspaceTab from "../components/WorkspaceTab";
 import {
@@ -68,6 +69,10 @@ function ChatPage({
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [typingUsersMap, setTypingUsersMap] = useState(new Map());
+  const [selectedUserProfile, setSelectedUserProfile] = useState(null);
+  const [isUserProfileVisible, setIsUserProfileVisible] = useState(false);
+  const [isUserProfileLoading, setIsUserProfileLoading] = useState(false);
+  const [userProfileError, setUserProfileError] = useState("");
   const previousTextChannelIdRef = useRef(null);
   const processedInviteCodeRef = useRef(null);
 
@@ -145,6 +150,12 @@ function ChatPage({
     });
     const unsubscribeNotifications = chatSignalR.onNotificationCreated((notification) => {
       setNotifications((current) => sortNotifications([notification, ...current]));
+
+      if (notification.type === "FriendRequest") {
+        refreshFriendsAndRequests().catch((error) => {
+          setSocialError(error.message);
+        });
+      }
     });
     const unsubscribePresence = chatSignalR.onPresenceChanged((payload) => {
       if (payload.userId === currentUser.id) {
@@ -428,6 +439,16 @@ function ChatPage({
     setFriendRequests(nextRequests);
   }
 
+  useEffect(() => {
+    if (activeView !== "friends") {
+      return;
+    }
+
+    refreshFriendsAndRequests().catch((error) => {
+      setSocialError(error.message);
+    });
+  }, [activeView]);
+
   async function handleSendMessage({ content, files, replyToMessageId }) {
     setSendError("");
 
@@ -579,6 +600,26 @@ function ChatPage({
     onCurrentUserChange(updatedUser);
   }
 
+  async function handleViewUserProfile(userId) {
+    if (!userId) {
+      return;
+    }
+
+    setIsUserProfileVisible(true);
+    setIsUserProfileLoading(true);
+    setUserProfileError("");
+
+    try {
+      const profile = await userApi.getById(userId);
+      setSelectedUserProfile(profile);
+    } catch (error) {
+      setSelectedUserProfile(null);
+      setUserProfileError(error.message);
+    } finally {
+      setIsUserProfileLoading(false);
+    }
+  }
+
   async function handleTypingChange(channelId, isTyping) {
     try {
       await chatSignalR.sendTyping(channelId, isTyping);
@@ -704,6 +745,7 @@ function ChatPage({
               onDeleteMessage={handleDeleteMessage}
               onTogglePinMessage={handleTogglePin}
               onToggleReaction={handleToggleReaction}
+              onViewUserProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
             />
           ) : activeView === "friends" ? (
             <FriendsPanel
@@ -718,6 +760,7 @@ function ChatPage({
               onAcceptRequest={(requestId) => handleAcceptRequest(requestId).catch((error) => setSocialError(error.message))}
               onRejectRequest={(requestId) => handleRejectRequest(requestId).catch((error) => setSocialError(error.message))}
               onUnfriend={(friendUserId) => handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))}
+              onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
             />
           ) : activeView === "notifications" ? (
             <NotificationsPanel
@@ -804,6 +847,19 @@ function ChatPage({
             </button>
           </form>
         </ModalShell>
+      )}
+
+      {isUserProfileVisible && (
+        <UserProfileModal
+          profile={selectedUserProfile}
+          isLoading={isUserProfileLoading}
+          error={userProfileError}
+          onClose={() => {
+            setIsUserProfileVisible(false);
+            setSelectedUserProfile(null);
+            setUserProfileError("");
+          }}
+        />
       )}
     </>
   );
