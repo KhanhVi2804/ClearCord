@@ -21,7 +21,7 @@ function UserRow({ user, children, subtitle }) {
           <strong>{user.displayName}</strong>
           <p>
             @{user.userName}
-            {subtitle ? ` • ${subtitle}` : ""}
+            {subtitle ? ` \u2022 ${subtitle}` : ""}
           </p>
         </div>
       </div>

@@ -590,6 +590,57 @@ function ChatPage({
     setNotifications((current) => current.map((notification) => ({ ...notification, isRead: true })));
   }
 
+  async function handleOpenNotification(notification) {
+    if (!notification) {
+      return;
+    }
+
+    if (!notification.isRead) {
+      await handleMarkNotificationRead(notification.id);
+    }
+
+    const relatedEntityType = notification.relatedEntityType?.toLowerCase() ?? "";
+
+    if (relatedEntityType === "friendrequest") {
+      await refreshFriendsAndRequests();
+      setActiveView("friends");
+      return;
+    }
+
+    if (relatedEntityType === "channel" && notification.relatedEntityId) {
+      const targetChannelId = notification.relatedEntityId;
+
+      if (selectedServer?.channels?.some((channel) => channel.id === targetChannelId)) {
+        setSelectedTextChannelId(targetChannelId);
+        setActiveView("chat");
+        return;
+      }
+
+      for (const server of servers) {
+        if (server.id === selectedServer?.id) {
+          continue;
+        }
+
+        const serverDetails = await serverApi.getServerDetails(server.id);
+        if (serverDetails.channels.some((channel) => channel.id === targetChannelId)) {
+          setSelectedServerId(server.id);
+          setSelectedTextChannelId(targetChannelId);
+          setActiveView("chat");
+          return;
+        }
+      }
+
+      setActiveView("chat");
+      return;
+    }
+
+    if (relatedEntityType === "server" && notification.relatedEntityId) {
+      await refreshServers(notification.relatedEntityId);
+      setSelectedServerId(notification.relatedEntityId);
+      setActiveView("chat");
+    }
+  }
+
   async function handleSaveProfile(payload) {
     const updatedUser = await userApi.updateCurrentUser(payload);
     onCurrentUserChange(updatedUser);
@@ -765,6 +816,7 @@ function ChatPage({
           ) : activeView === "notifications" ? (
             <NotificationsPanel
               notifications={notifications}
+              onOpenNotification={(notification) => handleOpenNotification(notification).catch((error) => setSocialError(error.message))}
               onMarkRead={(notificationId) => handleMarkNotificationRead(notificationId).catch((error) => setSocialError(error.message))}
               onMarkAllRead={() => handleMarkAllNotificationsRead().catch((error) => setSocialError(error.message))}
             />

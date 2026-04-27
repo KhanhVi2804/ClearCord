@@ -1,5 +1,6 @@
 function NotificationsPanel({
   notifications,
+  onOpenNotification,
   onMarkRead,
   onMarkAllRead
 }) {
@@ -28,7 +29,7 @@ function NotificationsPanel({
               key={notification.id}
               type="button"
               className={`notification-row ${notification.isRead ? "read" : "unread"}`}
-              onClick={() => onMarkRead(notification.id)}
+              onClick={() => onOpenNotification(notification)}
             >
               <div>
                 <div className="notification-row-top">

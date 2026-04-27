@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { toAssetUrl } from "../services/api";
 
-const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"];
+const QUICK_REACTIONS = [
+  "\u{1F44D}",
+  "\u2764\uFE0F",
+  "\u{1F602}",
+  "\u{1F389}",
+  "\u{1F440}"
+];
 
 function formatTime(timestamp) {
   if (!timestamp) {

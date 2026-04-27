@@ -111,3 +111,4 @@ This can be changed in `ClearCord/appsettings.json`.
 - In development, forgot-password returns a reset token directly for testing instead of sending email.
 - WebRTC support in this project is signaling-focused. For production-scale calling, a TURN/SFU strategy would still be needed.
 - SignalR chat uses channel-based groups and the `messageCreated` event, not the legacy `ReceiveMessage` flow.
+- A manual verification checklist for demos and regression testing is available in `docs/SMOKE_TEST_CHECKLIST.md`.
