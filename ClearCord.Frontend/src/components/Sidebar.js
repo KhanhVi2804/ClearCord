@@ -1,4 +1,5 @@
 import { toAssetUrl } from "../services/api";
+import { useI18n } from "../i18n";
 
 function Sidebar({
   servers,
@@ -10,6 +11,8 @@ function Sidebar({
   onOpenJoinServer,
   onLogout
 }) {
+  const { t } = useI18n();
+
   return (
     <aside className="sidebar">
       <div className="brand-tile">
@@ -51,7 +54,7 @@ function Sidebar({
           type="button"
           className="server-tile server-tile-add"
           onClick={onOpenCreateServer}
-          title="Create server"
+          title={t("sidebar.createServer")}
         >
           +
         </button>
@@ -60,7 +63,7 @@ function Sidebar({
           type="button"
           className="server-tile server-tile-join"
           onClick={onOpenJoinServer}
-          title="Join with invite"
+          title={t("sidebar.joinServer")}
         >
           {`<>`}
         </button>
@@ -69,11 +72,11 @@ function Sidebar({
       <div className="sidebar-footer">
         <div className="sidebar-stats">
           <div className="sidebar-stat">
-            <span className="sidebar-stat-label">Alerts</span>
+            <span className="sidebar-stat-label">{t("sidebar.alerts")}</span>
             <strong>{unreadNotificationCount}</strong>
           </div>
           <div className={`presence-pill ${currentUser.isOnline ? "online" : "offline"}`}>
-            {currentUser.isOnline ? "Online" : "Offline"}
+            {currentUser.isOnline ? t("common.online") : t("common.offline")}
           </div>
         </div>
 
@@ -96,7 +99,7 @@ function Sidebar({
         </div>
 
         <button type="button" className="ghost-button" onClick={onLogout}>
-          Log out
+          {t("sidebar.logout")}
         </button>
       </div>
     </aside>

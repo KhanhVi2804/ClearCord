@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { toAssetUrl } from "../services/api";
+import { useI18n } from "../i18n";
 
 function ProfilePanel({
   currentUser,
   onSaveProfile,
   onUploadAvatar
 }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     displayName: currentUser.displayName,
     bio: currentUser.bio || ""
@@ -25,8 +27,8 @@ function ProfilePanel({
     <section className="feature-panel">
       <div className="feature-panel-header">
         <div>
-          <p className="eyebrow">Profile</p>
-          <h2>Update your identity and avatar</h2>
+          <p className="eyebrow">{t("profile.eyebrow")}</p>
+          <h2>{t("profile.title")}</h2>
         </div>
       </div>
 
@@ -48,13 +50,13 @@ function ProfilePanel({
               <strong>{currentUser.displayName}</strong>
               <p>@{currentUser.userName}</p>
               <span className={`presence-pill ${currentUser.isOnline ? "online" : "offline"}`}>
-                {currentUser.isOnline ? "Online" : "Offline"}
+                {currentUser.isOnline ? t("common.online") : t("common.offline")}
               </span>
             </div>
           </div>
 
           <label className="file-upload-button profile-upload">
-            Upload avatar
+            {t("profile.uploadAvatar")}
             <input
               type="file"
               accept="image/*"
@@ -70,7 +72,7 @@ function ProfilePanel({
 
                 try {
                   await onUploadAvatar(file);
-                  setSuccess("Avatar updated.");
+                  setSuccess(t("profile.avatarUpdated"));
                 } catch (uploadError) {
                   setError(uploadError.message);
                 } finally {
@@ -92,7 +94,7 @@ function ProfilePanel({
 
             try {
               await onSaveProfile(form);
-              setSuccess("Profile updated.");
+              setSuccess(t("profile.profileUpdated"));
             } catch (saveError) {
               setError(saveError.message);
             } finally {
@@ -101,7 +103,7 @@ function ProfilePanel({
           }}
         >
           <label>
-            Display name
+            {t("auth.displayName")}
             <input
               type="text"
               value={form.displayName}
@@ -116,7 +118,7 @@ function ProfilePanel({
           </label>
 
           <label>
-            Bio
+            {t("profile.bio")}
             <textarea
               value={form.bio}
               onChange={(event) =>
@@ -133,7 +135,7 @@ function ProfilePanel({
           {success && <p className="form-success">{success}</p>}
 
           <button type="submit" className="primary-button" disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save profile"}
+            {isSaving ? t("profile.saving") : t("profile.saveProfile")}
           </button>
         </form>
       </div>

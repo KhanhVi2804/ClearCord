@@ -1,13 +1,6 @@
 import ModalShell from "./ModalShell";
 import { toAssetUrl } from "../services/api";
-
-function formatLastSeen(value) {
-  if (!value) {
-    return "No activity yet";
-  }
-
-  return new Date(value).toLocaleString();
-}
+import { useI18n } from "../i18n";
 
 function UserProfileModal({
   profile,
@@ -15,11 +8,13 @@ function UserProfileModal({
   error,
   onClose
 }) {
+  const { t, formatDateTime } = useI18n();
+
   return (
-    <ModalShell title="User profile" subtitle="Directory" onClose={onClose}>
+    <ModalShell title={t("userProfile.title")} subtitle={t("userProfile.subtitle")} onClose={onClose}>
       {isLoading ? (
         <div className="empty-panel">
-          <p>Loading user profile...</p>
+          <p>{t("userProfile.loading")}</p>
         </div>
       ) : error ? (
         <div className="empty-panel error-panel">
@@ -27,7 +22,7 @@ function UserProfileModal({
         </div>
       ) : !profile ? (
         <div className="empty-panel">
-          <p>No user profile was found.</p>
+          <p>{t("userProfile.notFound")}</p>
         </div>
       ) : (
         <div className="user-profile-modal">
@@ -47,7 +42,7 @@ function UserProfileModal({
               <strong>{profile.displayName}</strong>
               <p>@{profile.userName}</p>
               <span className={`presence-pill ${profile.isOnline ? "online" : "offline"}`}>
-                {profile.isOnline ? "Online" : "Offline"}
+                {profile.isOnline ? t("common.online") : t("common.offline")}
               </span>
             </div>
           </div>
@@ -55,19 +50,19 @@ function UserProfileModal({
           <div className="feature-card">
             <div className="profile-facts">
               <div>
-                <span>Email</span>
+                <span>{t("userProfile.email")}</span>
                 <strong>{profile.email}</strong>
               </div>
               <div>
-                <span>Last seen</span>
-                <strong>{formatLastSeen(profile.lastSeenAt)}</strong>
+                <span>{t("userProfile.lastSeen")}</span>
+                <strong>{profile.lastSeenAt ? formatDateTime(profile.lastSeenAt) : t("userProfile.noActivity")}</strong>
               </div>
             </div>
           </div>
 
           <div className="feature-card">
-            <h3>Bio</h3>
-            <p className="muted-copy">{profile.bio || "This user has not added a bio yet."}</p>
+            <h3>{t("userProfile.bio")}</h3>
+            <p className="muted-copy">{profile.bio || t("userProfile.bioEmpty")}</p>
           </div>
         </div>
       )}

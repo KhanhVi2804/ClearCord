@@ -3,12 +3,14 @@ import AdminPanel from "../components/AdminPanel";
 import ChannelList from "../components/ChannelList";
 import ChatBox from "../components/ChatBox";
 import FriendsPanel from "../components/FriendsPanel";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 import ModalShell from "../components/ModalShell";
 import NotificationsPanel from "../components/NotificationsPanel";
 import ProfilePanel from "../components/ProfilePanel";
 import Sidebar from "../components/Sidebar";
 import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
+import WorkspaceRail from "../components/WorkspaceRail";
 import WorkspaceTab from "../components/WorkspaceTab";
 import {
   channelApi,
@@ -28,6 +30,7 @@ import {
   updatePresenceInUsers,
   upsertMessage
 } from "./chatHelpers";
+import { useI18n } from "../i18n";
 
 function ChatPage({
   currentUser,
@@ -36,6 +39,7 @@ function ChatPage({
   onInviteConsumed,
   onLogout
 }) {
+  const { t } = useI18n();
   const [servers, setServers] = useState([]);
   const [selectedServerId, setSelectedServerId] = useState(null);
   const [selectedServer, setSelectedServer] = useState(null);
@@ -117,6 +121,18 @@ function ChatPage({
     [permissions]
   );
 
+  const onlineServerMembers = useMemo(
+    () => selectedServer?.members?.filter((member) => member.isOnline).length ?? 0,
+    [selectedServer?.members]
+  );
+
+  const onlineFriends = useMemo(
+    () => friends.filter((friend) => friend.isOnline).length,
+    [friends]
+  );
+
+  const activeChannelForRail = activeView === "voice" ? currentVoiceChannel : currentTextChannel;
+
   useEffect(() => {
     chatSignalR.start().catch((error) => {
       console.warn("Failed to start SignalR eagerly.", error);
@@ -168,16 +184,28 @@ function ChatPage({
         updateStoredUser(updatedUser);
       }
 
-      setFriends((current) => updatePresenceInUsers(current, payload, (friend) => friend.userId));
-      setSearchResults((current) => updatePresenceInUsers(current, payload));
-      setFriendRequests((current) =>
-        current.map((request) =>
-          request.user.id === payload.userId
-            ? { ...request, user: { ...request.user, isOnline: payload.isOnline } }
-            : request
-        )
-      );
-    });
+        setFriends((current) => updatePresenceInUsers(current, payload, (friend) => friend.userId));
+        setSearchResults((current) => updatePresenceInUsers(current, payload));
+        setFriendRequests((current) =>
+          current.map((request) =>
+            request.user.id === payload.userId
+              ? { ...request, user: { ...request.user, isOnline: payload.isOnline } }
+              : request
+          )
+        );
+        setSelectedServer((current) =>
+          current
+            ? {
+                ...current,
+                members: current.members.map((member) =>
+                  member.userId === payload.userId
+                    ? { ...member, isOnline: payload.isOnline, lastSeenAt: payload.lastSeenAt }
+                    : member
+                )
+              }
+            : current
+        );
+      });
     const unsubscribeTyping = chatSignalR.onTypingChanged((payload) => {
       if (payload.channelId === selectedTextChannelId && payload.userId !== currentUser.id) {
         setTypingUsersMap((current) => new Map(current).set(payload.userId, payload.isTyping));
@@ -705,42 +733,77 @@ function ChatPage({
 
         <div className="chat-stage">
           <div className="chat-stage-topbar workspace-topbar">
-            <div>
-              <p className="eyebrow">Signed in</p>
-              <h1>{currentUser.displayName}</h1>
-              <span className="topbar-subcopy">
-                {selectedServer ? `Working inside ${selectedServer.name}` : "No server selected yet"}
-              </span>
+            <div className="workspace-summary">
+              <div>
+                <p className="eyebrow">{t("workspace.signedIn")}</p>
+                <h1>{currentUser.displayName}</h1>
+                <span className="topbar-subcopy">
+                  {selectedServer
+                    ? t("workspace.workingInside", { server: selectedServer.name })
+                    : t("workspace.noServerSelected")}
+                </span>
+              </div>
+
+              <div className="status-card-group">
+                <div className="status-card">
+                  <span>{t("workspace.membersOnline")}</span>
+                  <strong>{onlineServerMembers}</strong>
+                </div>
+                <div className="status-card">
+                  <span>{t("workspace.friendsOnline")}</span>
+                  <strong>{onlineFriends}</strong>
+                </div>
+                <div className="status-card">
+                  <span>{t("workspace.unreadAlerts")}</span>
+                  <strong>{unreadNotificationCount}</strong>
+                </div>
+                <div className="status-card">
+                  <span>{t("workspace.liveConnection")}</span>
+                  <strong>{t(`channel.connection${connectionState[0].toUpperCase()}${connectionState.slice(1)}`)}</strong>
+                </div>
+              </div>
             </div>
 
-            <div className="workspace-tabs">
-              <WorkspaceTab id="chat" activeView={activeView} onSelect={setActiveView}>Chat</WorkspaceTab>
-              <WorkspaceTab id="friends" activeView={activeView} onSelect={setActiveView}>Friends</WorkspaceTab>
-              <WorkspaceTab id="voice" activeView={activeView} onSelect={setActiveView}>Calls</WorkspaceTab>
-              <WorkspaceTab
-                id="notifications"
-                activeView={activeView}
-                onSelect={setActiveView}
-                badge={unreadNotificationCount}
-              >
-                Alerts
-              </WorkspaceTab>
-              {canSeeAdmin && (
-                <WorkspaceTab id="admin" activeView={activeView} onSelect={setActiveView}>Admin</WorkspaceTab>
-              )}
-              <WorkspaceTab id="profile" activeView={activeView} onSelect={setActiveView}>Profile</WorkspaceTab>
+            <div className="header-actions">
+              <div className="inline-actions">
+                <button type="button" className="ghost-button compact" onClick={() => setIsCreateServerVisible(true)}>
+                  {t("workspace.createServer")}
+                </button>
+                <button type="button" className="ghost-button compact" onClick={() => setIsJoinServerVisible(true)}>
+                  {t("workspace.joinWithInvite")}
+                </button>
+                <LanguageSwitcher compact />
+              </div>
+
+              <div className="workspace-tabs">
+                <WorkspaceTab id="chat" activeView={activeView} onSelect={setActiveView}>{t("tabs.chat")}</WorkspaceTab>
+                <WorkspaceTab id="friends" activeView={activeView} onSelect={setActiveView}>{t("tabs.friends")}</WorkspaceTab>
+                <WorkspaceTab id="voice" activeView={activeView} onSelect={setActiveView}>{t("tabs.calls")}</WorkspaceTab>
+                <WorkspaceTab
+                  id="notifications"
+                  activeView={activeView}
+                  onSelect={setActiveView}
+                  badge={unreadNotificationCount}
+                >
+                  {t("tabs.alerts")}
+                </WorkspaceTab>
+                {canSeeAdmin && (
+                  <WorkspaceTab id="admin" activeView={activeView} onSelect={setActiveView}>{t("tabs.admin")}</WorkspaceTab>
+                )}
+                <WorkspaceTab id="profile" activeView={activeView} onSelect={setActiveView}>{t("tabs.profile")}</WorkspaceTab>
+              </div>
             </div>
           </div>
 
           {hasNoServers ? (
             <section className="chat-panel empty-state-shell">
               <div className="empty-state-card">
-                <p className="eyebrow">Fresh workspace</p>
-                <h2>Create or join your first server</h2>
-                <p>The backend starts clean, so create a server here or join one with an invite code.</p>
+                <p className="eyebrow">{t("workspace.freshWorkspace")}</p>
+                <h2>{t("workspace.createOrJoin")}</h2>
+                <p>{t("workspace.emptyWorkspaceBody")}</p>
                 <form className="server-form" onSubmit={handleCreateServer}>
                   <label>
-                    Server name
+                    {t("workspace.serverName")}
                     <input
                       type="text"
                       value={createServerForm.name}
@@ -751,7 +814,7 @@ function ChatPage({
                     />
                   </label>
                   <label>
-                    Description
+                    {t("workspace.description")}
                     <textarea
                       value={createServerForm.description}
                       onChange={(event) =>
@@ -763,10 +826,10 @@ function ChatPage({
                   {serversError && <p className="form-error">{serversError}</p>}
                   <div className="inline-actions">
                     <button type="submit" className="primary-button" disabled={isCreatingServer}>
-                      {isCreatingServer ? "Creating..." : "Create server"}
+                      {isCreatingServer ? t("workspace.creatingServer") : t("workspace.createServer")}
                     </button>
                     <button type="button" className="ghost-button" onClick={() => setIsJoinServerVisible(true)}>
-                      Join with invite
+                      {t("workspace.joinWithInvite")}
                     </button>
                   </div>
                 </form>
@@ -845,13 +908,25 @@ function ChatPage({
             <ProfilePanel currentUser={currentUser} onSaveProfile={handleSaveProfile} onUploadAvatar={handleUploadAvatar} />
           )}
         </div>
+
+        <WorkspaceRail
+          server={selectedServer}
+          invite={serverInvite}
+          currentChannel={activeChannelForRail}
+          unreadNotificationCount={unreadNotificationCount}
+          onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+        />
       </main>
 
       {isCreateServerVisible && (
-        <ModalShell title="Create another workspace" subtitle="New server" onClose={() => setIsCreateServerVisible(false)}>
+        <ModalShell
+          title={t("workspace.createServer")}
+          subtitle={t("workspace.serverOverview")}
+          onClose={() => setIsCreateServerVisible(false)}
+        >
           <form className="server-form" onSubmit={handleCreateServer}>
             <label>
-              Server name
+              {t("workspace.serverName")}
               <input
                 type="text"
                 value={createServerForm.name}
@@ -860,7 +935,7 @@ function ChatPage({
               />
             </label>
             <label>
-              Description
+              {t("workspace.description")}
               <textarea
                 value={createServerForm.description}
                 onChange={(event) => setCreateServerForm((current) => ({ ...current, description: event.target.value }))}
@@ -869,14 +944,18 @@ function ChatPage({
             </label>
             {serversError && <p className="form-error">{serversError}</p>}
             <button type="submit" className="primary-button" disabled={isCreatingServer}>
-              {isCreatingServer ? "Creating..." : "Create server"}
+              {isCreatingServer ? t("workspace.creatingServer") : t("workspace.createServer")}
             </button>
           </form>
         </ModalShell>
       )}
 
       {isJoinServerVisible && (
-        <ModalShell title="Join a workspace" subtitle="Invite link" onClose={() => setIsJoinServerVisible(false)}>
+        <ModalShell
+          title={t("workspace.joinServer")}
+          subtitle={t("workspace.inviteLink")}
+          onClose={() => setIsJoinServerVisible(false)}
+        >
           <form
             className="server-form"
             onSubmit={(event) => {
@@ -885,7 +964,7 @@ function ChatPage({
             }}
           >
             <label>
-              Invite code
+              {t("workspace.inviteCode")}
               <input
                 type="text"
                 value={joinInviteCode}
@@ -895,7 +974,7 @@ function ChatPage({
             </label>
             {serversError && <p className="form-error">{serversError}</p>}
             <button type="submit" className="primary-button" disabled={isJoiningServer}>
-              {isJoiningServer ? "Joining..." : "Join server"}
+              {isJoiningServer ? t("workspace.joiningServer") : t("workspace.joinServer")}
             </button>
           </form>
         </ModalShell>

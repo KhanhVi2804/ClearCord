@@ -40,6 +40,8 @@ public sealed record ServerMemberDto(
     string UserName,
     string DisplayName,
     string? AvatarUrl,
+    bool IsOnline,
+    DateTimeOffset? LastSeenAt,
     string? Nickname,
     IReadOnlyCollection<ServerRoleDto> Roles,
     DateTimeOffset JoinedAt);

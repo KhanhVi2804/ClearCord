@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toAssetUrl, voiceApi } from "../services/api";
 import { chatSignalR } from "../services/signalr";
+import { useI18n } from "../i18n";
 
 const RTC_CONFIGURATION = {
   iceServers: [
@@ -55,6 +56,7 @@ function VoicePanel({
   currentUser,
   currentChannel
 }) {
+  const { t } = useI18n();
   const [participants, setParticipants] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [localStream, setLocalStream] = useState(null);
@@ -525,7 +527,7 @@ function VoicePanel({
     return (
       <section className="feature-panel">
         <div className="empty-panel">
-          <p>Select a voice channel to open the call workspace.</p>
+          <p>{t("voice.empty")}</p>
         </div>
       </section>
     );
@@ -535,18 +537,18 @@ function VoicePanel({
     <section className="feature-panel">
       <div className="feature-panel-header">
         <div>
-          <p className="eyebrow">Voice + Video</p>
-          <h2>Peer-to-peer call workspace for {currentChannel.name}</h2>
+          <p className="eyebrow">{t("voice.eyebrow")}</p>
+          <h2>{t("voice.title", { channel: currentChannel.name })}</h2>
         </div>
 
         <div className="inline-actions">
           {!isJoined ? (
             <button type="button" className="primary-button" onClick={joinVoiceChannel} disabled={isBusy}>
-              {isBusy ? "Joining..." : "Join call"}
+              {isBusy ? t("voice.joining") : t("voice.joinCall")}
             </button>
           ) : (
             <button type="button" className="ghost-button danger" onClick={leaveVoiceChannel}>
-              Leave call
+              {t("voice.leaveCall")}
             </button>
           )}
         </div>
@@ -554,21 +556,21 @@ function VoicePanel({
 
       <div className="voice-toolbar">
         <button type="button" className={`ghost-button ${isMuted ? "danger" : ""}`} onClick={handleToggleMute} disabled={isBusy}>
-          {isMuted ? "Unmute" : "Mute"}
+          {isMuted ? t("voice.unmute") : t("voice.mute")}
         </button>
         <button type="button" className={`ghost-button ${isCameraEnabled ? "active" : ""}`} onClick={handleToggleCamera} disabled={isBusy}>
-          {isCameraEnabled ? "Turn camera off" : "Turn camera on"}
+          {isCameraEnabled ? t("voice.turnCameraOff") : t("voice.turnCameraOn")}
         </button>
         <button type="button" className={`ghost-button ${isScreenSharing ? "active" : ""}`} onClick={() => handleToggleScreenShare()} disabled={isBusy}>
-          {isScreenSharing ? "Stop share" : "Share screen"}
+          {isScreenSharing ? t("voice.stopShare") : t("voice.shareScreen")}
         </button>
-        <span className="mini-pill">{participants.length} participants</span>
+        <span className="mini-pill">{t("voice.participants", { count: participants.length })}</span>
       </div>
 
       <div className="media-grid">
         <MediaTile
-          title={`${currentUser.displayName} (you)`}
-          subtitle={`${isMuted ? "Muted" : "Mic live"}${isScreenSharing ? " - Sharing screen" : isCameraEnabled ? " - Camera on" : ""}`}
+          title={t("voice.you", { name: currentUser.displayName })}
+          subtitle={`${isMuted ? t("voice.muted") : t("voice.micLive")}${isScreenSharing ? ` - ${t("voice.sharingScreen")}` : isCameraEnabled ? ` - ${t("voice.cameraOn")}` : ""}`}
           stream={localStream}
           avatarUrl={currentUser.avatarUrl}
           isLocal
@@ -578,7 +580,7 @@ function VoicePanel({
           <MediaTile
             key={participant.userId}
             title={participant.displayName}
-            subtitle={`${participant.isMuted ? "Muted" : "Mic live"}${participant.isScreenSharing ? " - Sharing screen" : participant.isCameraEnabled ? " - Camera on" : ""}`}
+            subtitle={`${participant.isMuted ? t("voice.muted") : t("voice.micLive")}${participant.isScreenSharing ? ` - ${t("voice.sharingScreen")}` : participant.isCameraEnabled ? ` - ${t("voice.cameraOn")}` : ""}`}
             stream={participant.stream}
             avatarUrl={participant.avatarUrl}
           />

@@ -1,8 +1,13 @@
+import { useI18n } from "../i18n";
+
 function ChannelButton({
   channel,
   isActive,
   isVoiceActive,
-  onSelect
+  onSelect,
+  textFallback,
+  voiceFallback,
+  liveLabel
 }) {
   return (
     <button
@@ -10,12 +15,12 @@ function ChannelButton({
       className={`channel-button ${isActive ? "active" : ""} ${isVoiceActive ? "voice-live" : ""}`}
       onClick={() => onSelect(channel)}
     >
-      <span className="channel-icon">{channel.type === "Voice" ? "Call" : "#"}</span>
+      <span className="channel-icon">{channel.type === "Voice" ? "VC" : "#"}</span>
       <span className="channel-copy">
         <strong>{channel.name}</strong>
-        <small>{channel.topic || (channel.type === "Voice" ? "Voice channel" : "Text channel")}</small>
+        <small>{channel.topic || (channel.type === "Voice" ? voiceFallback : textFallback)}</small>
       </span>
-      {isVoiceActive && <span className="mini-pill">live</span>}
+      {isVoiceActive && <span className="mini-pill">{liveLabel}</span>}
     </button>
   );
 }
@@ -27,6 +32,7 @@ function ChannelList({
   connectionState,
   onSelectChannel
 }) {
+  const { t } = useI18n();
   const categories = server?.categories ?? [];
   const channels = server?.channels ?? [];
 
@@ -41,11 +47,13 @@ function ChannelList({
     <aside className="channel-panel">
       <div className="channel-panel-header">
         <div>
-          <p className="eyebrow">Server</p>
-          <h2>{server?.name ?? "No server selected"}</h2>
+          <p className="eyebrow">{t("channel.heading")}</p>
+          <h2>{server?.name ?? t("channel.noServer")}</h2>
         </div>
 
-        <span className={`connection-pill ${connectionState}`}>{connectionState}</span>
+        <span className={`connection-pill ${connectionState}`}>
+          {t(`channel.connection${connectionState[0].toUpperCase()}${connectionState.slice(1)}`)}
+        </span>
       </div>
 
       <div className="channel-scroll">
@@ -60,6 +68,9 @@ function ChannelList({
                   isActive={selectedTextChannelId === channel.id}
                   isVoiceActive={activeVoiceChannelId === channel.id}
                   onSelect={onSelectChannel}
+                  textFallback={t("channel.textFallback")}
+                  voiceFallback={t("channel.voiceFallback")}
+                  liveLabel={t("channel.live")}
                 />
               ))}
             </div>
@@ -68,7 +79,7 @@ function ChannelList({
 
         {uncategorizedChannels.length > 0 && (
           <section className="channel-category">
-            <header>Loose Channels</header>
+            <header>{t("channel.looseChannels")}</header>
             <div className="channel-list">
               {uncategorizedChannels.map((channel) => (
                 <ChannelButton
@@ -77,6 +88,9 @@ function ChannelList({
                   isActive={selectedTextChannelId === channel.id}
                   isVoiceActive={activeVoiceChannelId === channel.id}
                   onSelect={onSelectChannel}
+                  textFallback={t("channel.textFallback")}
+                  voiceFallback={t("channel.voiceFallback")}
+                  liveLabel={t("channel.live")}
                 />
               ))}
             </div>
@@ -85,7 +99,7 @@ function ChannelList({
 
         {!channels.length && (
           <div className="empty-panel">
-            <p>No channels are available in this server yet.</p>
+            <p>{t("channel.noChannels")}</p>
           </div>
         )}
       </div>

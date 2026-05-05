@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MessageItem from "./MessageItem";
+import { useI18n } from "../i18n";
 
 function ChatBox({
   currentUser,
@@ -26,6 +27,7 @@ function ChatBox({
   onToggleReaction,
   onViewUserProfile
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isSending, setIsSending] = useState(false);
@@ -52,7 +54,7 @@ function ChatBox({
   if (!currentServer) {
     return (
       <section className="chat-panel empty-panel">
-        <p>Select a server to load its channels and chat history.</p>
+        <p>{t("chat.selectServer")}</p>
       </section>
     );
   }
@@ -60,7 +62,7 @@ function ChatBox({
   if (!currentChannel) {
     return (
       <section className="chat-panel empty-panel">
-        <p>Select a text channel to join its real-time stream.</p>
+        <p>{t("chat.selectChannel")}</p>
       </section>
     );
   }
@@ -120,15 +122,17 @@ function ChatBox({
     <section className="chat-panel">
       <header className="chat-header">
         <div>
-          <p className="eyebrow">Live Channel</p>
+          <p className="eyebrow">{t("chat.liveChannel")}</p>
           <h2>#{currentChannel.name}</h2>
         </div>
         <p className="chat-topic">
-          {currentChannel.topic || "Conversation synced through SignalR channel groups."}
+          {currentChannel.topic || t("chat.conversationFallback")}
         </p>
         {typingUsers.length > 0 && (
           <div className="typing-line">
-            {typingUsers.map((user) => user.displayName || user.userName).join(", ")} typing...
+            {t("chat.typing", {
+              users: typingUsers.map((user) => user.displayName || user.userName).join(", ")
+            })}
           </div>
         )}
         {pinnedMessages.length > 0 && (
@@ -144,8 +148,8 @@ function ChatBox({
                     block: "center"
                   })
                 }
-              >
-                {message.sender?.displayName}: {message.content || "Attachment"}
+                >
+                {message.sender?.displayName}: {message.content || t("chat.attachment")}
               </button>
             ))}
           </div>
@@ -155,7 +159,7 @@ function ChatBox({
       <div className="message-stream" ref={messageListRef}>
         {isLoading ? (
           <div className="empty-panel">
-            <p>Loading channel history...</p>
+            <p>{t("chat.loadingHistory")}</p>
           </div>
         ) : error ? (
           <div className="empty-panel error-panel">
@@ -163,7 +167,7 @@ function ChatBox({
           </div>
         ) : messages.length === 0 ? (
           <div className="empty-panel">
-            <p>No messages yet. Be the first one to speak in #{currentChannel.name}.</p>
+            <p>{t("chat.noMessages", { channel: currentChannel.name })}</p>
           </div>
         ) : (
           messages.map((message) => {
@@ -201,11 +205,15 @@ function ChatBox({
           {replyToMessage && (
             <div className="context-banner">
               <div>
-                <strong>Replying to {replyToMessage.sender?.displayName || replyToMessage.sender?.userName}</strong>
-                <span>{replyToMessage.content || "Attachment"}</span>
+                <strong>
+                  {t("chat.replyTo", {
+                    name: replyToMessage.sender?.displayName || replyToMessage.sender?.userName
+                  })}
+                </strong>
+                <span>{replyToMessage.content || t("chat.attachment")}</span>
               </div>
               <button type="button" className="chip-button" onClick={onCancelReply}>
-                Clear
+                {t("chat.clearReply")}
               </button>
             </div>
           )}
@@ -225,7 +233,7 @@ function ChatBox({
             onChange={(event) => {
               handleDraftChange(event.target.value);
             }}
-            placeholder={`Message #${currentChannel.name}`}
+            placeholder={t("chat.messagePlaceholder", { channel: currentChannel.name })}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -238,7 +246,7 @@ function ChatBox({
 
         <div className="composer-actions">
           <label className="file-upload-button">
-            Attach
+            {t("chat.attach")}
             <input
               type="file"
               multiple
@@ -253,7 +261,7 @@ function ChatBox({
             className="primary-button"
             disabled={(!draft.trim() && selectedFiles.length === 0) || isSending}
           >
-            {isSending ? "Sending..." : "Send"}
+            {isSending ? t("chat.sending") : t("common.send")}
           </button>
         </div>
       </form>

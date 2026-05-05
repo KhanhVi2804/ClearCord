@@ -1,4 +1,5 @@
 import { toAssetUrl } from "../services/api";
+import { useI18n } from "../i18n";
 
 function UserAvatar({ user }) {
   return (
@@ -44,25 +45,27 @@ function FriendsPanel({
   onUnfriend,
   onViewProfile
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="feature-panel">
       <div className="feature-panel-header">
         <div>
-          <p className="eyebrow">Friends</p>
-          <h2>Search, add, and manage your friend list</h2>
+          <p className="eyebrow">{t("friends.eyebrow")}</p>
+          <h2>{t("friends.title")}</h2>
         </div>
       </div>
 
       <div className="feature-grid">
         <div className="feature-card">
-          <h3>Find users</h3>
+          <h3>{t("friends.searchUsers")}</h3>
           <label>
-            Search by username or display name
+            {t("friends.searchLabel")}
             <input
               type="text"
               value={searchTerm}
               onChange={(event) => onSearchTermChange(event.target.value)}
-              placeholder="Search users..."
+              placeholder={t("friends.searchPlaceholder")}
             />
           </label>
 
@@ -71,33 +74,33 @@ function FriendsPanel({
               <UserRow
                 key={user.id}
                 user={user}
-                subtitle={user.isOnline ? "online" : "offline"}
+                subtitle={user.isOnline ? t("common.online").toLowerCase() : t("common.offline").toLowerCase()}
               >
                 <button
                   type="button"
                   className="ghost-button compact"
                   onClick={() => onViewProfile?.(user.id)}
                 >
-                  View profile
+                  {t("friends.viewProfile")}
                 </button>
                 <button
                   type="button"
                   className="primary-button compact"
                   onClick={() => onSendRequest(user.id)}
                 >
-                  Add friend
+                  {t("friends.addFriend")}
                 </button>
               </UserRow>
             ))}
 
             {!searchResults.length && searchTerm.trim().length > 1 && (
-              <p className="muted-copy">No users matched your search.</p>
+              <p className="muted-copy">{t("friends.noSearchResults")}</p>
             )}
           </div>
         </div>
 
         <div className="feature-card">
-          <h3>Pending requests</h3>
+          <h3>{t("friends.pendingRequests")}</h3>
           <div className="list-stack">
             {requests.map((request) => (
               <UserRow
@@ -110,34 +113,34 @@ function FriendsPanel({
                   className="ghost-button compact"
                   onClick={() => onViewProfile?.(request.user.id)}
                 >
-                  View profile
+                  {t("friends.viewProfile")}
                 </button>
                 <button
                   type="button"
                   className="primary-button compact"
                   onClick={() => onAcceptRequest(request.id)}
                 >
-                  Accept
+                  {t("friends.accept")}
                 </button>
                 <button
                   type="button"
                   className="ghost-button compact"
                   onClick={() => onRejectRequest(request.id)}
                 >
-                  Reject
+                  {t("friends.reject")}
                 </button>
               </UserRow>
             ))}
 
-            {!requests.length && <p className="muted-copy">No pending friend requests.</p>}
+            {!requests.length && <p className="muted-copy">{t("friends.noRequests")}</p>}
           </div>
         </div>
       </div>
 
       <div className="feature-card">
-        <h3>Current friends</h3>
+        <h3>{t("friends.currentFriends")}</h3>
         {isLoading ? (
-          <p className="muted-copy">Loading your friend graph...</p>
+          <p className="muted-copy">{t("friends.loadingFriends")}</p>
         ) : (
           <div className="list-stack">
             {friends.map((friend) => (
@@ -149,26 +152,26 @@ function FriendsPanel({
                   displayName: friend.displayName,
                   avatarUrl: friend.avatarUrl
                 }}
-                subtitle={friend.isOnline ? "online" : "offline"}
+                subtitle={friend.isOnline ? t("common.online").toLowerCase() : t("common.offline").toLowerCase()}
               >
                 <button
                   type="button"
                   className="ghost-button compact"
                   onClick={() => onViewProfile?.(friend.userId)}
                 >
-                  View profile
+                  {t("friends.viewProfile")}
                 </button>
                 <button
                   type="button"
                   className="ghost-button compact"
                   onClick={() => onUnfriend(friend.userId)}
                 >
-                  Unfriend
+                  {t("friends.unfriend")}
                 </button>
               </UserRow>
             ))}
 
-            {!friends.length && <p className="muted-copy">You have not added any friends yet.</p>}
+            {!friends.length && <p className="muted-copy">{t("friends.noFriends")}</p>}
           </div>
         )}
       </div>
