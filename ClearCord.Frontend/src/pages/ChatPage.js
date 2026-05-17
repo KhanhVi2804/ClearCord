@@ -1,15 +1,14 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import AdminPanel from "../components/AdminPanel";
-import ChannelList from "../components/ChannelList";
 import ChatBox from "../components/ChatBox";
-import FriendsPanel from "../components/FriendsPanel";
 import ModalShell from "../components/ModalShell";
-import NotificationsPanel from "../components/NotificationsPanel";
 import ProfilePanel from "../components/ProfilePanel";
-import Sidebar from "../components/Sidebar";
+import SecondaryPanel from "../components/SecondaryPanel";
+import NavRail from "../components/NavRail";
+import ServerRail from "../components/ServerRail";
 import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
-import WorkspaceTab from "../components/WorkspaceTab";
+import WorkspaceRail from "../components/WorkspaceRail";
 import {
   channelApi,
   friendApi,
@@ -28,6 +27,7 @@ import {
   updatePresenceInUsers,
   upsertMessage
 } from "./chatHelpers";
+import { useI18n } from "../i18n";
 
 function ChatPage({
   currentUser,
@@ -36,6 +36,7 @@ function ChatPage({
   onInviteConsumed,
   onLogout
 }) {
+  const { t } = useI18n();
   const [servers, setServers] = useState([]);
   const [selectedServerId, setSelectedServerId] = useState(null);
   const [selectedServer, setSelectedServer] = useState(null);
@@ -168,16 +169,28 @@ function ChatPage({
         updateStoredUser(updatedUser);
       }
 
-      setFriends((current) => updatePresenceInUsers(current, payload, (friend) => friend.userId));
-      setSearchResults((current) => updatePresenceInUsers(current, payload));
-      setFriendRequests((current) =>
-        current.map((request) =>
-          request.user.id === payload.userId
-            ? { ...request, user: { ...request.user, isOnline: payload.isOnline } }
-            : request
-        )
-      );
-    });
+        setFriends((current) => updatePresenceInUsers(current, payload, (friend) => friend.userId));
+        setSearchResults((current) => updatePresenceInUsers(current, payload));
+        setFriendRequests((current) =>
+          current.map((request) =>
+            request.user.id === payload.userId
+              ? { ...request, user: { ...request.user, isOnline: payload.isOnline } }
+              : request
+          )
+        );
+        setSelectedServer((current) =>
+          current
+            ? {
+                ...current,
+                members: current.members.map((member) =>
+                  member.userId === payload.userId
+                    ? { ...member, isOnline: payload.isOnline, lastSeenAt: payload.lastSeenAt }
+                    : member
+                )
+              }
+            : current
+        );
+      });
     const unsubscribeTyping = chatSignalR.onTypingChanged((payload) => {
       if (payload.channelId === selectedTextChannelId && payload.userId !== currentUser.id) {
         setTypingUsersMap((current) => new Map(current).set(payload.userId, payload.isTyping));
@@ -684,63 +697,80 @@ function ChatPage({
   return (
     <>
       <main className="chat-page">
-        <Sidebar
-          servers={servers}
-          selectedServerId={selectedServerId}
-          currentUser={currentUser}
-          unreadNotificationCount={unreadNotificationCount}
-          onSelectServer={setSelectedServerId}
-          onOpenCreateServer={() => setIsCreateServerVisible(true)}
-          onOpenJoinServer={() => setIsJoinServerVisible(true)}
-          onLogout={onLogout}
-        />
+        <div className="left-rails">
+          <ServerRail
+            servers={servers}
+            selectedServerId={selectedServerId}
+            activeView={activeView}
+            currentUser={currentUser}
+            onSelectServer={setSelectedServerId}
+            onSelectView={setActiveView}
+            onOpenCreateServer={() => setIsCreateServerVisible(true)}
+            onOpenJoinServer={() => setIsJoinServerVisible(true)}
+            onOpenProfile={() => setActiveView("profile")}
+          />
+          <NavRail
+            activeView={activeView}
+            unreadNotificationCount={unreadNotificationCount}
+            canSeeAdmin={canSeeAdmin}
+            onSelectView={setActiveView}
+            onLogout={onLogout}
+          />
+        </div>
 
-        <ChannelList
-          server={selectedServer}
-          selectedTextChannelId={selectedTextChannelId}
-          activeVoiceChannelId={activeVoiceChannelId}
-          connectionState={connectionState}
-          onSelectChannel={handleSelectChannel}
-        />
+        <div className="secondary-panel">
+          <SecondaryPanel
+            activeView={activeView}
+            server={selectedServer}
+            selectedTextChannelId={selectedTextChannelId}
+            activeVoiceChannelId={activeVoiceChannelId}
+            connectionState={connectionState}
+            onSelectChannel={handleSelectChannel}
+            friends={friends}
+            friendRequests={friendRequests}
+            searchTerm={searchTerm}
+            searchResults={searchResults}
+            isFriendsLoading={isFriendsLoading}
+            socialError={socialError}
+            onSearchTermChange={setSearchTerm}
+            onSendFriendRequest={(targetUserId) =>
+              handleSendFriendRequest(targetUserId).catch((error) => setSocialError(error.message))
+            }
+            onAcceptFriendRequest={(requestId) =>
+              handleAcceptRequest(requestId).catch((error) => setSocialError(error.message))
+            }
+            onRejectFriendRequest={(requestId) =>
+              handleRejectRequest(requestId).catch((error) => setSocialError(error.message))
+            }
+            onUnfriend={(friendUserId) =>
+              handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))
+            }
+            onViewProfile={(userId) =>
+              handleViewUserProfile(userId).catch((error) => setSocialError(error.message))
+            }
+            notifications={notifications}
+            onOpenNotification={(notification) =>
+              handleOpenNotification(notification).catch((error) => setSocialError(error.message))
+            }
+            onMarkNotificationRead={(notificationId) =>
+              handleMarkNotificationRead(notificationId).catch((error) => setSocialError(error.message))
+            }
+            onMarkAllNotificationsRead={() =>
+              handleMarkAllNotificationsRead().catch((error) => setSocialError(error.message))
+            }
+          />
+        </div>
 
         <div className="chat-stage">
-          <div className="chat-stage-topbar workspace-topbar">
-            <div>
-              <p className="eyebrow">Signed in</p>
-              <h1>{currentUser.displayName}</h1>
-              <span className="topbar-subcopy">
-                {selectedServer ? `Working inside ${selectedServer.name}` : "No server selected yet"}
-              </span>
-            </div>
-
-            <div className="workspace-tabs">
-              <WorkspaceTab id="chat" activeView={activeView} onSelect={setActiveView}>Chat</WorkspaceTab>
-              <WorkspaceTab id="friends" activeView={activeView} onSelect={setActiveView}>Friends</WorkspaceTab>
-              <WorkspaceTab id="voice" activeView={activeView} onSelect={setActiveView}>Calls</WorkspaceTab>
-              <WorkspaceTab
-                id="notifications"
-                activeView={activeView}
-                onSelect={setActiveView}
-                badge={unreadNotificationCount}
-              >
-                Alerts
-              </WorkspaceTab>
-              {canSeeAdmin && (
-                <WorkspaceTab id="admin" activeView={activeView} onSelect={setActiveView}>Admin</WorkspaceTab>
-              )}
-              <WorkspaceTab id="profile" activeView={activeView} onSelect={setActiveView}>Profile</WorkspaceTab>
-            </div>
-          </div>
-
           {hasNoServers ? (
             <section className="chat-panel empty-state-shell">
               <div className="empty-state-card">
-                <p className="eyebrow">Fresh workspace</p>
-                <h2>Create or join your first server</h2>
-                <p>The backend starts clean, so create a server here or join one with an invite code.</p>
+                <p className="eyebrow">{t("workspace.freshWorkspace")}</p>
+                <h2>{t("workspace.createOrJoin")}</h2>
+                <p>{t("workspace.emptyWorkspaceBody")}</p>
                 <form className="server-form" onSubmit={handleCreateServer}>
                   <label>
-                    Server name
+                    {t("workspace.serverName")}
                     <input
                       type="text"
                       value={createServerForm.name}
@@ -751,7 +781,7 @@ function ChatPage({
                     />
                   </label>
                   <label>
-                    Description
+                    {t("workspace.description")}
                     <textarea
                       value={createServerForm.description}
                       onChange={(event) =>
@@ -763,16 +793,16 @@ function ChatPage({
                   {serversError && <p className="form-error">{serversError}</p>}
                   <div className="inline-actions">
                     <button type="submit" className="primary-button" disabled={isCreatingServer}>
-                      {isCreatingServer ? "Creating..." : "Create server"}
+                      {isCreatingServer ? t("workspace.creatingServer") : t("workspace.createServer")}
                     </button>
                     <button type="button" className="ghost-button" onClick={() => setIsJoinServerVisible(true)}>
-                      Join with invite
+                      {t("workspace.joinWithInvite")}
                     </button>
                   </div>
                 </form>
               </div>
             </section>
-          ) : activeView === "chat" ? (
+          ) : (
             <ChatBox
               currentUser={currentUser}
               currentServer={selectedServer}
@@ -798,60 +828,24 @@ function ChatPage({
               onToggleReaction={handleToggleReaction}
               onViewUserProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
             />
-          ) : activeView === "friends" ? (
-            <FriendsPanel
-              friends={friends}
-              requests={friendRequests}
-              searchTerm={searchTerm}
-              searchResults={searchResults}
-              isLoading={isFriendsLoading}
-              error={socialError}
-              onSearchTermChange={setSearchTerm}
-              onSendRequest={(targetUserId) => handleSendFriendRequest(targetUserId).catch((error) => setSocialError(error.message))}
-              onAcceptRequest={(requestId) => handleAcceptRequest(requestId).catch((error) => setSocialError(error.message))}
-              onRejectRequest={(requestId) => handleRejectRequest(requestId).catch((error) => setSocialError(error.message))}
-              onUnfriend={(friendUserId) => handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))}
-              onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
-            />
-          ) : activeView === "notifications" ? (
-            <NotificationsPanel
-              notifications={notifications}
-              onOpenNotification={(notification) => handleOpenNotification(notification).catch((error) => setSocialError(error.message))}
-              onMarkRead={(notificationId) => handleMarkNotificationRead(notificationId).catch((error) => setSocialError(error.message))}
-              onMarkAllRead={() => handleMarkAllNotificationsRead().catch((error) => setSocialError(error.message))}
-            />
-          ) : activeView === "voice" ? (
-            <VoicePanel currentUser={currentUser} currentChannel={currentVoiceChannel} />
-          ) : activeView === "admin" ? (
-            <AdminPanel
-              server={selectedServer}
-              invite={serverInvite}
-              permissions={permissions}
-              onUpdateServer={async (serverId, payload) => { await serverApi.updateServer(serverId, payload); await refreshSelectedServer(serverId); }}
-              onDeleteServer={async (serverId) => { await serverApi.deleteServer(serverId); await refreshServers(); setActiveView("chat"); }}
-              onLeaveServer={async (serverId) => { await serverApi.leaveServer(serverId); await refreshServers(); setActiveView("chat"); }}
-              onCreateCategory={async (serverId, payload) => { await channelApi.createCategory(serverId, payload); await refreshSelectedServer(serverId); }}
-              onUpdateCategory={async (categoryId, payload) => { await channelApi.updateCategory(categoryId, payload); await refreshSelectedServer(); }}
-              onDeleteCategory={async (categoryId) => { await channelApi.deleteCategory(categoryId); await refreshSelectedServer(); }}
-              onCreateChannel={async (serverId, payload) => { await channelApi.createChannel(serverId, payload); await refreshSelectedServer(serverId); }}
-              onUpdateChannel={async (channelId, payload) => { await channelApi.updateChannel(channelId, payload); await refreshSelectedServer(); }}
-              onDeleteChannel={async (channelId) => { await channelApi.deleteChannel(channelId); await refreshSelectedServer(); }}
-              onCreateRole={async (serverId, payload) => { await serverApi.createRole(serverId, payload); await refreshSelectedServer(serverId); }}
-              onAssignRole={async (serverId, roleId, userId) => { await serverApi.assignRole(serverId, roleId, userId); await refreshSelectedServer(serverId); }}
-              onKickMember={async (serverId, userId, reason) => { await serverApi.kickMember(serverId, userId, reason); await refreshSelectedServer(serverId); }}
-              onBanMember={async (serverId, userId, reason) => { await serverApi.banMember(serverId, userId, reason); await refreshSelectedServer(serverId); }}
-            />
-          ) : (
-            <ProfilePanel currentUser={currentUser} onSaveProfile={handleSaveProfile} onUploadAvatar={handleUploadAvatar} />
           )}
         </div>
+
+        <WorkspaceRail
+          server={selectedServer}
+          onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+        />
       </main>
 
       {isCreateServerVisible && (
-        <ModalShell title="Create another workspace" subtitle="New server" onClose={() => setIsCreateServerVisible(false)}>
+        <ModalShell
+          title={t("workspace.createServer")}
+          subtitle={t("workspace.serverOverview")}
+          onClose={() => setIsCreateServerVisible(false)}
+        >
           <form className="server-form" onSubmit={handleCreateServer}>
             <label>
-              Server name
+              {t("workspace.serverName")}
               <input
                 type="text"
                 value={createServerForm.name}
@@ -860,7 +854,7 @@ function ChatPage({
               />
             </label>
             <label>
-              Description
+              {t("workspace.description")}
               <textarea
                 value={createServerForm.description}
                 onChange={(event) => setCreateServerForm((current) => ({ ...current, description: event.target.value }))}
@@ -869,14 +863,18 @@ function ChatPage({
             </label>
             {serversError && <p className="form-error">{serversError}</p>}
             <button type="submit" className="primary-button" disabled={isCreatingServer}>
-              {isCreatingServer ? "Creating..." : "Create server"}
+              {isCreatingServer ? t("workspace.creatingServer") : t("workspace.createServer")}
             </button>
           </form>
         </ModalShell>
       )}
 
       {isJoinServerVisible && (
-        <ModalShell title="Join a workspace" subtitle="Invite link" onClose={() => setIsJoinServerVisible(false)}>
+        <ModalShell
+          title={t("workspace.joinServer")}
+          subtitle={t("workspace.inviteLink")}
+          onClose={() => setIsJoinServerVisible(false)}
+        >
           <form
             className="server-form"
             onSubmit={(event) => {
@@ -885,7 +883,7 @@ function ChatPage({
             }}
           >
             <label>
-              Invite code
+              {t("workspace.inviteCode")}
               <input
                 type="text"
                 value={joinInviteCode}
@@ -895,7 +893,7 @@ function ChatPage({
             </label>
             {serversError && <p className="form-error">{serversError}</p>}
             <button type="submit" className="primary-button" disabled={isJoiningServer}>
-              {isJoiningServer ? "Joining..." : "Join server"}
+              {isJoiningServer ? t("workspace.joiningServer") : t("workspace.joinServer")}
             </button>
           </form>
         </ModalShell>
@@ -912,6 +910,86 @@ function ChatPage({
             setUserProfileError("");
           }}
         />
+      )}
+
+      {activeView === "profile" && (
+        <ModalShell wide bare onClose={() => setActiveView("chat")}>
+          <ProfilePanel
+            currentUser={currentUser}
+            onSaveProfile={handleSaveProfile}
+            onUploadAvatar={handleUploadAvatar}
+          />
+        </ModalShell>
+      )}
+
+      {activeView === "admin" && (
+        <ModalShell wide bare onClose={() => setActiveView("chat")}>
+          <AdminPanel
+            server={selectedServer}
+            invite={serverInvite}
+            permissions={permissions}
+            onUpdateServer={async (serverId, payload) => {
+              await serverApi.updateServer(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onDeleteServer={async (serverId) => {
+              await serverApi.deleteServer(serverId);
+              await refreshServers();
+              setActiveView("chat");
+            }}
+            onLeaveServer={async (serverId) => {
+              await serverApi.leaveServer(serverId);
+              await refreshServers();
+              setActiveView("chat");
+            }}
+            onCreateCategory={async (serverId, payload) => {
+              await channelApi.createCategory(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onUpdateCategory={async (categoryId, payload) => {
+              await channelApi.updateCategory(categoryId, payload);
+              await refreshSelectedServer();
+            }}
+            onDeleteCategory={async (categoryId) => {
+              await channelApi.deleteCategory(categoryId);
+              await refreshSelectedServer();
+            }}
+            onCreateChannel={async (serverId, payload) => {
+              await channelApi.createChannel(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onUpdateChannel={async (channelId, payload) => {
+              await channelApi.updateChannel(channelId, payload);
+              await refreshSelectedServer();
+            }}
+            onDeleteChannel={async (channelId) => {
+              await channelApi.deleteChannel(channelId);
+              await refreshSelectedServer();
+            }}
+            onCreateRole={async (serverId, payload) => {
+              await serverApi.createRole(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onAssignRole={async (serverId, roleId, userId) => {
+              await serverApi.assignRole(serverId, roleId, userId);
+              await refreshSelectedServer(serverId);
+            }}
+            onKickMember={async (serverId, userId, reason) => {
+              await serverApi.kickMember(serverId, userId, reason);
+              await refreshSelectedServer(serverId);
+            }}
+            onBanMember={async (serverId, userId, reason) => {
+              await serverApi.banMember(serverId, userId, reason);
+              await refreshSelectedServer(serverId);
+            }}
+          />
+        </ModalShell>
+      )}
+
+      {activeView === "voice" && (
+        <ModalShell wide bare onClose={() => setActiveView("chat")}>
+          <VoicePanel currentUser={currentUser} currentChannel={currentVoiceChannel} />
+        </ModalShell>
       )}
     </>
   );

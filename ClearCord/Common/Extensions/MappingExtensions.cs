@@ -90,6 +90,8 @@ public static class MappingExtensions
             member.User.UserName ?? string.Empty,
             member.User.DisplayName,
             member.User.AvatarUrl,
+            member.User.IsOnline,
+            member.User.LastSeenAt,
             member.Nickname,
             assignedRoles,
             member.JoinedAt);

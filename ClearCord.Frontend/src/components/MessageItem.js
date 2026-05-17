@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toAssetUrl } from "../services/api";
+import { useI18n } from "../i18n";
 
 const QUICK_REACTIONS = [
   "\u{1F44D}",
@@ -8,17 +9,6 @@ const QUICK_REACTIONS = [
   "\u{1F389}",
   "\u{1F440}"
 ];
-
-function formatTime(timestamp) {
-  if (!timestamp) {
-    return "";
-  }
-
-  return new Date(timestamp).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
 
 function groupReactions(reactions, currentUserId) {
   const grouped = new Map();
@@ -55,6 +45,7 @@ function MessageItem({
   onToggleReaction,
   onViewProfile
 }) {
+  const { t, formatTime } = useI18n();
   const [editDraft, setEditDraft] = useState(message.content || "");
   const sender = message.sender ?? {};
   const initials =
@@ -77,7 +68,9 @@ function MessageItem({
         type="button"
         className="avatar-badge message-avatar message-profile-trigger"
         onClick={() => onViewProfile?.(sender.id)}
-        aria-label={`View ${sender.displayName || sender.userName || "user"} profile`}
+        aria-label={t("chat.viewProfile", {
+          name: sender.displayName || sender.userName || t("common.unknownUser")
+        })}
       >
         {sender.avatarUrl ? (
           <img src={toAssetUrl(sender.avatarUrl)} alt={sender.displayName} className="avatar-image" />
@@ -96,39 +89,41 @@ function MessageItem({
             {sender.displayName || sender.userName || "Unknown user"}
           </button>
           <span>{formatTime(message.createdAt)}</span>
-          {message.isEdited && <em>edited</em>}
-          {message.isPinned && <span className="mini-pill">pinned</span>}
+          {message.isEdited && <em>{t("chat.edited")}</em>}
+          {message.isPinned && <span className="mini-pill">{t("chat.pinned")}</span>}
         </div>
 
         {message.replyTo && (
           <div className="reply-pill">
-            Replying to {message.replyTo.sender?.displayName || message.replyTo.sender?.userName}:{" "}
-            {message.replyTo.content || "attachment"}
+            {t("chat.replyPreview", {
+              name: message.replyTo.sender?.displayName || message.replyTo.sender?.userName,
+              content: message.replyTo.content || t("chat.attachment").toLowerCase()
+            })}
           </div>
         )}
 
         <div className="message-actions">
           {!message.isDeleted && (
             <button type="button" className="chip-button" onClick={() => onReply(message)}>
-              Reply
+              {t("common.reply")}
             </button>
           )}
 
           {canEdit && !message.isDeleted && (
             <button type="button" className="chip-button" onClick={() => onStartEdit(message)}>
-              Edit
+              {t("common.edit")}
             </button>
           )}
 
           {canDelete && (
             <button type="button" className="chip-button danger" onClick={() => onDelete(message)}>
-              Delete
+              {t("common.delete")}
             </button>
           )}
 
           {canPin && (
             <button type="button" className="chip-button" onClick={() => onTogglePin(message)}>
-              {message.isPinned ? "Unpin" : "Pin"}
+              {message.isPinned ? t("chat.unpin") : t("chat.pin")}
             </button>
           )}
         </div>
@@ -149,16 +144,16 @@ function MessageItem({
             />
             <div className="inline-actions">
               <button type="submit" className="primary-button" disabled={!editDraft.trim()}>
-                Save
+                {t("chat.save")}
               </button>
               <button type="button" className="ghost-button" onClick={onCancelEdit}>
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </form>
         ) : (
           <div className={`message-bubble ${message.isDeleted ? "deleted" : ""}`}>
-            {message.isDeleted ? "This message was deleted." : message.content || "Attachment only"}
+            {message.isDeleted ? t("chat.deletedMessage") : message.content || t("chat.attachmentOnly")}
           </div>
         )}
 

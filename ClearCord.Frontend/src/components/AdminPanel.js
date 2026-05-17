@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import ModalShell from "./ModalShell";
+import { useI18n } from "../i18n";
 
 const PERMISSION_OPTIONS = [
   "ViewChannels",
@@ -20,6 +21,7 @@ function InlineCategoryEditor({
   onSave,
   onDelete
 }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     name: category.name,
     position: category.position
@@ -66,10 +68,10 @@ function InlineCategoryEditor({
         required
       />
       <button type="submit" className="ghost-button compact">
-        Save
+        {t("common.save")}
       </button>
       <button type="button" className="ghost-button compact danger" onClick={() => onDelete(category.id)}>
-        Delete
+        {t("common.delete")}
       </button>
     </form>
   );
@@ -81,6 +83,7 @@ function InlineChannelEditor({
   onSave,
   onDelete
 }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     name: channel.name,
     topic: channel.topic || "",
@@ -132,7 +135,7 @@ function InlineChannelEditor({
           }))
         }
       >
-        <option value="">No category</option>
+        <option value="">{t("admin.noCategory")}</option>
         {categories.map((category) => (
           <option key={category.id} value={category.id}>
             {category.name}
@@ -148,7 +151,7 @@ function InlineChannelEditor({
             topic: event.target.value
           }))
         }
-        placeholder={form.type === "Voice" ? "Voice topic" : "Text topic"}
+        placeholder={form.type === "Voice" ? t("channel.voiceFallback") : t("channel.textFallback")}
       />
       <input
         type="number"
@@ -162,10 +165,10 @@ function InlineChannelEditor({
         required
       />
       <button type="submit" className="ghost-button compact">
-        Save
+        {t("common.save")}
       </button>
       <button type="button" className="ghost-button compact danger" onClick={() => onDelete(channel.id)}>
-        Delete
+        {t("common.delete")}
       </button>
     </form>
   );
@@ -227,6 +230,7 @@ function AdminPanel({
   const [moderationReason, setModerationReason] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const { t } = useI18n();
 
   const canManageServer = permissions.has("ManageServer");
   const canManageChannels = permissions.has("ManageChannels");
@@ -261,11 +265,13 @@ function AdminPanel({
     [server?.members]
   );
 
+  const permissionLabel = (permission) => t(`permissions.${permission}`);
+
   if (!server) {
     return (
       <section className="feature-panel">
         <div className="empty-panel">
-          <p>Select a server to manage its settings, channels, roles, and members.</p>
+          <p>{t("admin.empty")}</p>
         </div>
       </section>
     );
@@ -291,8 +297,8 @@ function AdminPanel({
     <section className="feature-panel">
       <div className="feature-panel-header">
         <div>
-          <p className="eyebrow">Admin</p>
-          <h2>Server, channel, role, and moderation tools</h2>
+          <p className="eyebrow">{t("admin.eyebrow")}</p>
+          <h2>{t("admin.title")}</h2>
         </div>
       </div>
 
@@ -303,17 +309,17 @@ function AdminPanel({
             event.preventDefault();
             runAction(async () => {
               await onUpdateServer(server.id, serverForm);
-              setSuccess("Server updated.");
+              setSuccess(t("admin.serverUpdated"));
             });
           }}
         >
           <div className="section-heading">
-            <h3>Server settings</h3>
-            <span className="mini-pill">{server.members.length} members</span>
+            <h3>{t("admin.serverSettings")}</h3>
+            <span className="mini-pill">{server.members.length} {t("common.members").toLowerCase()}</span>
           </div>
 
           <label>
-            Server name
+            {t("workspace.serverName")}
             <input
               type="text"
               value={serverForm.name}
@@ -329,7 +335,7 @@ function AdminPanel({
           </label>
 
           <label>
-            Description
+            {t("workspace.description")}
             <textarea
               value={serverForm.description}
               onChange={(event) =>
@@ -345,7 +351,7 @@ function AdminPanel({
 
           {invite && (
             <div className="invite-card">
-              <strong>Invite code</strong>
+              <strong>{t("admin.inviteCode")}</strong>
               <code>{invite.inviteCode}</code>
               <a href={invite.inviteUrl}>{invite.inviteUrl}</a>
             </div>
@@ -353,7 +359,7 @@ function AdminPanel({
 
           <div className="inline-actions">
             <button type="submit" className="primary-button" disabled={!canManageServer}>
-              Save server
+              {t("admin.saveServer")}
             </button>
 
             <button
@@ -361,7 +367,7 @@ function AdminPanel({
               className="ghost-button"
               onClick={() => setServerAction("leave")}
             >
-              Leave server
+              {t("admin.leaveServer")}
             </button>
 
             <button
@@ -370,14 +376,14 @@ function AdminPanel({
               disabled={!canManageServer}
               onClick={() => setServerAction("delete")}
             >
-              Delete server
+              {t("admin.deleteServer")}
             </button>
           </div>
         </form>
 
         <div className="feature-card">
           <div className="section-heading">
-            <h3>Categories</h3>
+            <h3>{t("admin.categories")}</h3>
             <span className="mini-pill">{server.categories.length}</span>
           </div>
 
@@ -389,13 +395,13 @@ function AdminPanel({
                 onSave={(categoryId, payload) =>
                   runAction(async () => {
                     await onUpdateCategory(categoryId, payload);
-                    setSuccess("Category updated.");
+                    setSuccess(t("admin.categoryUpdated"));
                   })
                 }
                 onDelete={(categoryId) =>
                   runAction(async () => {
                     await onDeleteCategory(categoryId);
-                    setSuccess("Category deleted.");
+                    setSuccess(t("admin.categoryDeleted"));
                   })
                 }
               />
@@ -415,7 +421,7 @@ function AdminPanel({
                   name: "",
                   position: server.categories.length + 2
                 });
-                setSuccess("Category created.");
+                setSuccess(t("admin.categoryCreated"));
               });
             }}
           >
@@ -428,7 +434,7 @@ function AdminPanel({
                   name: event.target.value
                 }))
               }
-              placeholder="New category"
+              placeholder={t("admin.newCategory")}
               disabled={!canManageChannels}
               required
             />
@@ -445,14 +451,14 @@ function AdminPanel({
               required
             />
             <button type="submit" className="primary-button compact" disabled={!canManageChannels}>
-              Add category
+              {t("admin.addCategory")}
             </button>
           </form>
         </div>
 
         <div className="feature-card admin-span-2">
           <div className="section-heading">
-            <h3>Channels</h3>
+            <h3>{t("admin.channels")}</h3>
             <span className="mini-pill">{server.channels.length}</span>
           </div>
 
@@ -465,13 +471,13 @@ function AdminPanel({
                 onSave={(channelId, payload) =>
                   runAction(async () => {
                     await onUpdateChannel(channelId, payload);
-                    setSuccess("Channel updated.");
+                    setSuccess(t("admin.channelUpdated"));
                   })
                 }
                 onDelete={(channelId) =>
                   runAction(async () => {
                     await onDeleteChannel(channelId);
-                    setSuccess("Channel deleted.");
+                    setSuccess(t("admin.channelDeleted"));
                   })
                 }
               />
@@ -497,12 +503,12 @@ function AdminPanel({
                   topic: "",
                   position: server.channels.length + 2
                 });
-                setSuccess("Channel created.");
+                setSuccess(t("admin.channelCreated"));
               });
             }}
           >
             <label>
-              Channel name
+              {t("admin.channelName")}
               <input
                 type="text"
                 value={newChannel.name}
@@ -518,7 +524,7 @@ function AdminPanel({
             </label>
 
             <label>
-              Type
+              {t("admin.type")}
               <select
                 value={newChannel.type}
                 onChange={(event) =>
@@ -529,13 +535,13 @@ function AdminPanel({
                 }
                 disabled={!canManageChannels}
               >
-                <option value="Text">Text</option>
-                <option value="Voice">Voice</option>
+                <option value="Text">{t("channel.textType")}</option>
+                <option value="Voice">{t("channel.voiceType")}</option>
               </select>
             </label>
 
             <label>
-              Category
+              {t("admin.category")}
               <select
                 value={newChannel.categoryId}
                 onChange={(event) =>
@@ -546,7 +552,7 @@ function AdminPanel({
                 }
                 disabled={!canManageChannels}
               >
-                <option value="">No category</option>
+                <option value="">{t("admin.noCategory")}</option>
                 {server.categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -556,7 +562,7 @@ function AdminPanel({
             </label>
 
             <label>
-              Topic
+              {t("admin.topic")}
               <input
                 type="text"
                 value={newChannel.topic}
@@ -571,7 +577,7 @@ function AdminPanel({
             </label>
 
             <label>
-              Position
+              {t("admin.position")}
               <input
                 type="number"
                 value={newChannel.position}
@@ -587,14 +593,14 @@ function AdminPanel({
             </label>
 
             <button type="submit" className="primary-button" disabled={!canManageChannels}>
-              Create channel
+              {t("admin.createChannel")}
             </button>
           </form>
         </div>
 
         <div className="feature-card">
           <div className="section-heading">
-            <h3>Roles</h3>
+            <h3>{t("admin.roles")}</h3>
             <span className="mini-pill">{server.roles.length}</span>
           </div>
 
@@ -602,7 +608,7 @@ function AdminPanel({
             {server.roles.map((role) => (
               <div key={role.id} className="role-card">
                 <RoleBadge role={role} />
-                <p>{role.permissions.join(", ")}</p>
+                <p>{role.permissions.map(permissionLabel).join(", ")}</p>
               </div>
             ))}
           </div>
@@ -619,12 +625,12 @@ function AdminPanel({
                   permissions: ["ViewChannels", "SendMessages", "ConnectToVoice"],
                   isDefault: false
                 });
-                setSuccess("Role created.");
+                setSuccess(t("admin.roleCreated"));
               });
             }}
           >
             <label>
-              Role name
+              {t("admin.roleName")}
               <input
                 type="text"
                 value={newRole.name}
@@ -640,7 +646,7 @@ function AdminPanel({
             </label>
 
             <label>
-              Color
+              {t("admin.color")}
               <input
                 type="color"
                 value={newRole.colorHex}
@@ -666,7 +672,7 @@ function AdminPanel({
                 }
                 disabled={!canManageRoles}
               />
-              Default role for new members
+              {t("admin.defaultRole")}
             </label>
 
             <div className="permission-grid">
@@ -685,20 +691,20 @@ function AdminPanel({
                     }
                     disabled={!canManageRoles}
                   />
-                  {permission}
+                  {permissionLabel(permission)}
                 </label>
               ))}
             </div>
 
             <button type="submit" className="primary-button" disabled={!canManageRoles}>
-              Create role
+              {t("admin.createRole")}
             </button>
           </form>
         </div>
 
         <div className="feature-card admin-span-2">
           <div className="section-heading">
-            <h3>Members</h3>
+            <h3>{t("admin.members")}</h3>
             <span className="mini-pill">{server.members.length}</span>
           </div>
 
@@ -713,7 +719,7 @@ function AdminPanel({
               }
               disabled={!canManageRoles}
             >
-              <option value="">Select member</option>
+              <option value="">{t("admin.selectMember")}</option>
               {sortedMembers.map((member) => (
                 <option key={member.userId} value={member.userId}>
                   {member.displayName}
@@ -731,7 +737,7 @@ function AdminPanel({
               }
               disabled={!canManageRoles}
             >
-              <option value="">Select role</option>
+              <option value="">{t("admin.selectRole")}</option>
               {server.roles.map((role) => (
                 <option key={role.id} value={role.id}>
                   {role.name}
@@ -746,11 +752,11 @@ function AdminPanel({
               onClick={() =>
                 runAction(async () => {
                   await onAssignRole(server.id, assignmentTarget.roleId, assignmentTarget.userId);
-                  setSuccess("Role assigned.");
+                  setSuccess(t("admin.roleAssigned"));
                 })
               }
             >
-              Assign role
+              {t("admin.assignRole")}
             </button>
           </div>
 
@@ -780,7 +786,7 @@ function AdminPanel({
                         });
                       }}
                     >
-                      Kick
+                      {t("admin.kick")}
                     </button>
                   )}
 
@@ -796,7 +802,7 @@ function AdminPanel({
                         });
                       }}
                     >
-                      Ban
+                      {t("admin.ban")}
                     </button>
                   )}
                 </div>
@@ -811,15 +817,15 @@ function AdminPanel({
 
       {serverAction && (
         <ModalShell
-          title={serverAction === "delete" ? "Delete server" : "Leave server"}
-          subtitle="Confirmation"
+          title={serverAction === "delete" ? t("admin.deleteServer") : t("admin.leaveServer")}
+          subtitle={t("admin.confirmation")}
           onClose={() => setServerAction(null)}
         >
           <div className="auth-stack">
             <p className="muted-copy">
               {serverAction === "delete"
-                ? "This permanently removes the server and its channels."
-                : "You will leave this server and lose direct access until you join again."}
+                ? t("admin.deleteServerConfirm")
+                : t("admin.leaveServerConfirm")}
             </p>
             <div className="inline-actions">
               <button
@@ -837,10 +843,10 @@ function AdminPanel({
                   })
                 }
               >
-                {serverAction === "delete" ? "Delete server" : "Leave server"}
+                {serverAction === "delete" ? t("admin.deleteServer") : t("admin.leaveServer")}
               </button>
               <button type="button" className="ghost-button" onClick={() => setServerAction(null)}>
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -849,8 +855,8 @@ function AdminPanel({
 
       {moderationDialog && (
         <ModalShell
-          title={moderationDialog.action === "ban" ? "Ban member" : "Kick member"}
-          subtitle="Moderation"
+          title={moderationDialog.action === "ban" ? t("admin.banMember") : t("admin.kickMember")}
+          subtitle={t("admin.moderation")}
           onClose={closeModerationDialog}
         >
           <form
@@ -860,10 +866,10 @@ function AdminPanel({
               runAction(async () => {
                 if (moderationDialog.action === "ban") {
                   await onBanMember(server.id, moderationDialog.member.userId, moderationReason);
-                  setSuccess("Member banned.");
+                  setSuccess(t("admin.memberBanned"));
                 } else {
                   await onKickMember(server.id, moderationDialog.member.userId, moderationReason);
-                  setSuccess("Member kicked.");
+                  setSuccess(t("admin.memberKicked"));
                 }
 
                 closeModerationDialog();
@@ -871,25 +877,28 @@ function AdminPanel({
             }}
           >
             <p className="muted-copy">
-              {moderationDialog.member.displayName} will be {moderationDialog.action === "ban" ? "banned from" : "removed from"} this server.
+              {t("admin.moderationNotice", {
+                member: moderationDialog.member.displayName,
+                action: moderationDialog.action === "ban" ? t("admin.actionBannedFrom") : t("admin.actionRemovedFrom")
+              })}
             </p>
 
             <label>
-              Reason
+              {t("admin.reason")}
               <textarea
                 value={moderationReason}
                 onChange={(event) => setModerationReason(event.target.value)}
                 rows={4}
-                placeholder="Optional moderation note"
+                placeholder={t("admin.optionalReason")}
               />
             </label>
 
             <div className="inline-actions">
               <button type="submit" className="primary-button danger-action">
-                {moderationDialog.action === "ban" ? "Ban member" : "Kick member"}
+                {moderationDialog.action === "ban" ? t("admin.banMember") : t("admin.kickMember")}
               </button>
               <button type="button" className="ghost-button" onClick={closeModerationDialog}>
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </form>

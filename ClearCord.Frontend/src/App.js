@@ -11,6 +11,7 @@ import {
   userApi
 } from "./services/api";
 import { chatSignalR } from "./services/signalr";
+import { useI18n } from "./i18n";
 
 function getInviteCodeFromPath(pathname) {
   const match = pathname.match(/^\/invite\/([^/]+)$/i);
@@ -27,6 +28,7 @@ function navigateTo(pathname) {
 }
 
 function App() {
+  const { t } = useI18n();
   const [token, setToken] = useState(() => getStoredToken());
   const [currentUser, setCurrentUser] = useState(() => getStoredUser());
   const [pathname, setPathname] = useState(() => window.location.pathname);
@@ -148,9 +150,9 @@ function App() {
     return (
       <div className="splash-screen">
         <div className="splash-card">
-          <p className="eyebrow">ClearCord</p>
-          <h1>Connecting your workspace...</h1>
-          <p>Refreshing your session and preparing the chat client.</p>
+          <p className="eyebrow">{t("app.splashEyebrow")}</p>
+          <h1>{t("app.splashTitle")}</h1>
+          <p>{t("app.splashBody")}</p>
         </div>
       </div>
     );

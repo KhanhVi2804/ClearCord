@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { authApi } from "../services/api";
+import LanguageSwitcher from "../components/LanguageSwitcher";
+import { useI18n } from "../i18n";
 
 function AuthTabButton({ id, activeTab, onSelect, children }) {
   return (
@@ -14,6 +16,7 @@ function AuthTabButton({ id, activeTab, onSelect, children }) {
 }
 
 function Login({ inviteCode, onLogin, onRegister }) {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState("signin");
   const [signInForm, setSignInForm] = useState({
     emailOrUserName: "",
@@ -41,8 +44,8 @@ function Login({ inviteCode, onLogin, onRegister }) {
       return null;
     }
 
-    return `You are opening invite code ${inviteCode}. Sign in or create an account and ClearCord will join the server automatically.`;
-  }, [inviteCode]);
+    return t("auth.inviteMessage", { inviteCode });
+  }, [inviteCode, t]);
 
   async function submitWithFeedback(action) {
     setError("");
@@ -66,22 +69,28 @@ function Login({ inviteCode, onLogin, onRegister }) {
   return (
     <main className="login-page">
       <section className="login-hero">
-        <p className="eyebrow">Realtime Workspace</p>
+        <div className="login-language-bar">
+          <LanguageSwitcher />
+        </div>
+        <p className="eyebrow">{t("auth.heroEyebrow")}</p>
         <h1>ClearCord</h1>
-        <p>
-          A Discord-style client wired for ASP.NET Core APIs, SignalR channel groups, persisted
-          messages, notifications, and WebRTC voice/video signaling.
-        </p>
+        <p>{t("auth.heroDescription")}</p>
+
+        <div className="login-feature-list">
+          <span className="mini-pill">{t("auth.featureRealtime")}</span>
+          <span className="mini-pill">{t("auth.featureCommunities")}</span>
+          <span className="mini-pill">{t("auth.featureCalls")}</span>
+        </div>
 
         <div className="login-hero-grid">
           <div className="login-hero-card">
-            <span>SignalR Hub</span>
-            <strong>/hubs/chat</strong>
+            <span>{t("auth.signalrLabel")}</span>
+            <strong>{t("auth.signalrValue")}</strong>
           </div>
 
           <div className="login-hero-card">
-            <span>Visual Studio Ready</span>
-            <strong>Backend serves the React app directly</strong>
+            <span>{t("auth.readyLabel")}</span>
+            <strong>{t("auth.readyValue")}</strong>
           </div>
         </div>
 
@@ -95,19 +104,19 @@ function Login({ inviteCode, onLogin, onRegister }) {
               resetFeedback();
               setActiveTab(tab);
             }}>
-              Sign in
+              {t("auth.signInTab")}
             </AuthTabButton>
             <AuthTabButton id="register" activeTab={activeTab} onSelect={(tab) => {
               resetFeedback();
               setActiveTab(tab);
             }}>
-              Register
+              {t("auth.registerTab")}
             </AuthTabButton>
             <AuthTabButton id="forgot" activeTab={activeTab} onSelect={(tab) => {
               resetFeedback();
               setActiveTab(tab);
             }}>
-              Reset access
+              {t("auth.resetTab")}
             </AuthTabButton>
           </div>
 
@@ -120,12 +129,12 @@ function Login({ inviteCode, onLogin, onRegister }) {
               }}
             >
               <div>
-                <p className="eyebrow">Sign in</p>
-                <h2>Connect to your workspace</h2>
+                <p className="eyebrow">{t("auth.signInEyebrow")}</p>
+                <h2>{t("auth.signInTitle")}</h2>
               </div>
 
               <label>
-                Email or username
+                {t("auth.emailOrUsername")}
                 <input
                   type="text"
                   value={signInForm.emailOrUserName}
@@ -142,7 +151,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
               </label>
 
               <label>
-                Password
+                {t("auth.password")}
                 <input
                   type="password"
                   value={signInForm.password}
@@ -161,7 +170,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
               {error && <p className="form-error">{error}</p>}
 
               <button type="submit" className="primary-button" disabled={isSubmitting}>
-                {isSubmitting ? "Signing in..." : "Sign in"}
+                {isSubmitting ? t("auth.signingIn") : t("auth.signInTab")}
               </button>
 
               <button
@@ -172,7 +181,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
                   setActiveTab("forgot");
                 }}
               >
-                Forgot your password?
+                {t("auth.forgotPassword")}
               </button>
             </form>
           )}
@@ -186,12 +195,12 @@ function Login({ inviteCode, onLogin, onRegister }) {
               }}
             >
               <div>
-                <p className="eyebrow">Register</p>
-                <h2>Create a new ClearCord account</h2>
+                <p className="eyebrow">{t("auth.registerEyebrow")}</p>
+                <h2>{t("auth.registerTitle")}</h2>
               </div>
 
               <label>
-                Username
+                {t("auth.userName")}
                 <input
                   type="text"
                   value={registerForm.userName}
@@ -210,12 +219,11 @@ function Login({ inviteCode, onLogin, onRegister }) {
               </label>
 
               <p className="helper-copy">
-                Username should not contain spaces or accented characters. Put your Vietnamese name
-                in Display name instead.
+                {t("auth.usernameHelper")}
               </p>
 
               <label>
-                Display name
+                {t("auth.displayName")}
                 <input
                   type="text"
                   value={registerForm.displayName}
@@ -231,7 +239,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
               </label>
 
               <label>
-                Email
+                {t("auth.email")}
                 <input
                   type="email"
                   value={registerForm.email}
@@ -248,7 +256,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
               </label>
 
               <label>
-                Password
+                {t("auth.password")}
                 <input
                   type="password"
                   value={registerForm.password}
@@ -267,7 +275,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
               {error && <p className="form-error">{error}</p>}
 
               <button type="submit" className="primary-button" disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Create account"}
+                {isSubmitting ? t("auth.creatingAccount") : t("auth.createAccount")}
               </button>
             </form>
           )}
@@ -275,8 +283,8 @@ function Login({ inviteCode, onLogin, onRegister }) {
           {activeTab === "forgot" && (
             <div className="auth-stack">
               <div>
-                <p className="eyebrow">Reset access</p>
-                <h2>Generate a password reset token</h2>
+                <p className="eyebrow">{t("auth.resetEyebrow")}</p>
+                <h2>{t("auth.resetTitle")}</h2>
               </div>
 
               <form
@@ -299,7 +307,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
                 }}
               >
                 <label>
-                  Account email
+                  {t("auth.accountEmail")}
                   <input
                     type="email"
                     value={forgotEmail}
@@ -311,7 +319,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
                 </label>
 
                 <button type="submit" className="primary-button" disabled={isSubmitting}>
-                  {isSubmitting ? "Generating..." : "Generate token"}
+                  {isSubmitting ? t("auth.generatingToken") : t("auth.generateToken")}
                 </button>
               </form>
 
@@ -321,12 +329,12 @@ function Login({ inviteCode, onLogin, onRegister }) {
               {forgotResult && (
                 <div className="token-card">
                   <div>
-                    <strong>User ID</strong>
-                    <code>{forgotResult.userId || "Hidden when email is not found"}</code>
+                    <strong>{t("auth.userId")}</strong>
+                    <code>{forgotResult.userId || t("auth.hiddenWhenNotFound")}</code>
                   </div>
                   <div>
-                    <strong>Reset token</strong>
-                    <code>{forgotResult.resetToken || "Hidden when email is not found"}</code>
+                    <strong>{t("auth.resetToken")}</strong>
+                    <code>{forgotResult.resetToken || t("auth.hiddenWhenNotFound")}</code>
                   </div>
                 </div>
               )}
@@ -337,7 +345,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
                   event.preventDefault();
                   submitWithFeedback(async () => {
                     await authApi.resetPassword(resetForm);
-                    setSuccessMessage("Password reset complete. You can now sign in.");
+                    setSuccessMessage(t("auth.passwordResetComplete"));
                     setActiveTab("signin");
                     setSignInForm((current) => ({
                       ...current,
@@ -347,7 +355,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
                 }}
               >
                 <label>
-                  User ID
+                  {t("auth.userId")}
                   <input
                     type="text"
                     value={resetForm.userId}
@@ -357,13 +365,13 @@ function Login({ inviteCode, onLogin, onRegister }) {
                         userId: event.target.value
                       }))
                     }
-                    placeholder="Paste the returned user ID"
+                    placeholder={t("auth.pasteReturnedUserId")}
                     required
                   />
                 </label>
 
                 <label>
-                  Reset token
+                  {t("auth.resetToken")}
                   <textarea
                     value={resetForm.token}
                     onChange={(event) =>
@@ -372,14 +380,14 @@ function Login({ inviteCode, onLogin, onRegister }) {
                         token: event.target.value
                       }))
                     }
-                    placeholder="Paste the returned token"
+                    placeholder={t("auth.pasteReturnedToken")}
                     rows={3}
                     required
                   />
                 </label>
 
                 <label>
-                  New password
+                  {t("auth.newPassword")}
                   <input
                     type="password"
                     value={resetForm.newPassword}
@@ -396,7 +404,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
                 </label>
 
                 <button type="submit" className="primary-button" disabled={isSubmitting}>
-                  {isSubmitting ? "Resetting..." : "Reset password"}
+                  {isSubmitting ? t("auth.resettingPassword") : t("auth.resetPassword")}
                 </button>
               </form>
             </div>
@@ -405,8 +413,7 @@ function Login({ inviteCode, onLogin, onRegister }) {
           {successMessage && activeTab !== "forgot" && <p className="form-success">{successMessage}</p>}
 
           <p className="login-footnote">
-            JWT is stored in localStorage, attached to Axios requests, and reused automatically for
-            SignalR connections once you enter the workspace.
+            {t("auth.jwtFootnote")}
           </p>
         </div>
       </section>
