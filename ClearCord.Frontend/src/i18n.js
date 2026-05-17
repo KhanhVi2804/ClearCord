@@ -48,6 +48,8 @@ const messages = {
       profile: "Profile"
     },
     sidebar: {
+      navigation: "Main navigation",
+      servers: "Servers",
       createServer: "Create server",
       joinServer: "Join with invite",
       alerts: "Alerts",
@@ -354,6 +356,8 @@ const messages = {
       profile: "Hồ sơ"
     },
     sidebar: {
+      navigation: "Điều hướng chính",
+      servers: "Danh sách server",
       createServer: "Tạo server",
       joinServer: "Vào bằng lời mời",
       alerts: "Thông báo",

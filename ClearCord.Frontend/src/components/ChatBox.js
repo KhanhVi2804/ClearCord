@@ -121,13 +121,16 @@ function ChatBox({
   return (
     <section className="chat-panel">
       <header className="chat-header">
-        <div>
-          <p className="eyebrow">{t("chat.liveChannel")}</p>
-          <h2>#{currentChannel.name}</h2>
+        <div className="chat-header-main">
+          <span className="channel-hash">#</span>
+          <h2>{currentChannel.name}</h2>
+          {currentChannel.topic ? (
+            <>
+              <span className="chat-header-divider" aria-hidden="true" />
+              <p className="chat-topic">{currentChannel.topic}</p>
+            </>
+          ) : null}
         </div>
-        <p className="chat-topic">
-          {currentChannel.topic || t("chat.conversationFallback")}
-        </p>
         {typingUsers.length > 0 && (
           <div className="typing-line">
             {t("chat.typing", {

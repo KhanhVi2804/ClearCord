@@ -26,7 +26,7 @@ function UserProfileModal({
         </div>
       ) : (
         <div className="user-profile-modal">
-          <div className="profile-hero">
+          <div className="profile-hero profile-hero-modal">
             <div className="profile-avatar-large">
               {profile.avatarUrl ? (
                 <img
@@ -38,7 +38,7 @@ function UserProfileModal({
                 <span>{profile.displayName?.[0]?.toUpperCase() || profile.userName?.[0]?.toUpperCase() || "U"}</span>
               )}
             </div>
-            <div>
+            <div className="profile-hero-copy">
               <strong>{profile.displayName}</strong>
               <p>@{profile.userName}</p>
               <span className={`presence-pill ${profile.isOnline ? "online" : "offline"}`}>
@@ -49,11 +49,11 @@ function UserProfileModal({
 
           <div className="feature-card">
             <div className="profile-facts">
-              <div>
+              <div className="profile-fact">
                 <span>{t("userProfile.email")}</span>
                 <strong>{profile.email}</strong>
               </div>
-              <div>
+              <div className="profile-fact">
                 <span>{t("userProfile.lastSeen")}</span>
                 <strong>{profile.lastSeenAt ? formatDateTime(profile.lastSeenAt) : t("userProfile.noActivity")}</strong>
               </div>

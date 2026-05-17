@@ -32,7 +32,7 @@ function ProfilePanel({
         </div>
       </div>
 
-      <div className="feature-grid">
+      <div className="feature-grid profile-layout">
         <div className="feature-card profile-card">
           <div className="profile-hero">
             <div className="profile-avatar-large">

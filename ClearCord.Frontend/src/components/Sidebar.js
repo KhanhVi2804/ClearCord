@@ -1,11 +1,24 @@
 import { toAssetUrl } from "../services/api";
+import LanguageSwitcher from "./LanguageSwitcher";
 import { useI18n } from "../i18n";
+
+const NAV_ITEMS = [
+  { id: "chat", icon: "#", labelKey: "tabs.chat" },
+  { id: "friends", icon: "@", labelKey: "tabs.friends" },
+  { id: "voice", icon: "♪", labelKey: "tabs.calls" },
+  { id: "notifications", icon: "!", labelKey: "tabs.alerts", badgeKey: "notifications" },
+  { id: "admin", icon: "⚙", labelKey: "tabs.admin", adminOnly: true },
+  { id: "profile", icon: "◉", labelKey: "tabs.profile" }
+];
 
 function Sidebar({
   servers,
   selectedServerId,
   currentUser,
+  activeView,
   unreadNotificationCount,
+  canSeeAdmin,
+  onSelectView,
   onSelectServer,
   onOpenCreateServer,
   onOpenJoinServer,
@@ -15,72 +28,89 @@ function Sidebar({
 
   return (
     <aside className="sidebar">
-      <div className="brand-tile">
-        <span className="brand-mark">CC</span>
-      </div>
+      <div className="sidebar-top">
+        <div className="brand-tile" title="ClearCord">
+          <span className="brand-mark">CC</span>
+        </div>
 
-      <div className="server-stack">
-        {servers.map((server) => {
-          const isActive = server.id === selectedServerId;
-          const initials = server.name
-            .split(" ")
-            .slice(0, 2)
-            .map((chunk) => chunk[0])
-            .join("")
-            .toUpperCase();
+        <nav className="sidebar-nav" aria-label={t("sidebar.navigation")}>
+          {NAV_ITEMS.filter((item) => !item.adminOnly || canSeeAdmin).map((item) => {
+            const badge =
+              item.badgeKey === "notifications" && unreadNotificationCount > 0
+                ? unreadNotificationCount
+                : null;
 
-          return (
-            <button
-              key={server.id}
-              type="button"
-              className={`server-tile ${isActive ? "active" : ""}`}
-              onClick={() => onSelectServer(server.id)}
-              title={server.name}
-            >
-              {server.iconUrl ? (
-                <img
-                  src={toAssetUrl(server.iconUrl)}
-                  alt={server.name}
-                  className="server-avatar-image"
-                />
-              ) : (
-                <span>{initials}</span>
-              )}
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`nav-icon-btn ${activeView === item.id ? "active" : ""}`}
+                onClick={() => onSelectView(item.id)}
+                title={t(item.labelKey)}
+                aria-label={t(item.labelKey)}
+                aria-current={activeView === item.id ? "page" : undefined}
+              >
+                <span className="nav-icon-glyph">{item.icon}</span>
+                {badge ? <span className="nav-badge">{badge > 9 ? "9+" : badge}</span> : null}
+              </button>
+            );
+          })}
+        </nav>
 
-        <button
-          type="button"
-          className="server-tile server-tile-add"
-          onClick={onOpenCreateServer}
-          title={t("sidebar.createServer")}
-        >
-          +
-        </button>
+        <div className="server-stack">
+          <div className="server-divider" aria-hidden="true" />
 
-        <button
-          type="button"
-          className="server-tile server-tile-join"
-          onClick={onOpenJoinServer}
-          title={t("sidebar.joinServer")}
-        >
-          {`<>`}
-        </button>
+          {servers.map((server) => {
+            const isActive = server.id === selectedServerId && activeView === "chat";
+            const initials = server.name
+              .split(" ")
+              .slice(0, 2)
+              .map((chunk) => chunk[0])
+              .join("")
+              .toUpperCase();
+
+            return (
+              <button
+                key={server.id}
+                type="button"
+                className={`server-tile ${isActive ? "active" : ""}`}
+                onClick={() => {
+                  onSelectServer(server.id);
+                  onSelectView("chat");
+                }}
+                title={server.name}
+              >
+                {server.iconUrl ? (
+                  <img src={toAssetUrl(server.iconUrl)} alt={server.name} className="server-avatar-image" />
+                ) : (
+                  <span>{initials}</span>
+                )}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            className="server-tile server-tile-add"
+            onClick={onOpenCreateServer}
+            title={t("sidebar.createServer")}
+          >
+            +
+          </button>
+
+          <button
+            type="button"
+            className="server-tile server-tile-join"
+            onClick={onOpenJoinServer}
+            title={t("sidebar.joinServer")}
+          >
+            {`<>`}
+          </button>
+        </div>
       </div>
 
       <div className="sidebar-footer">
-        <div className="sidebar-stats">
-          <div className="sidebar-stat">
-            <span className="sidebar-stat-label">{t("sidebar.alerts")}</span>
-            <strong>{unreadNotificationCount}</strong>
-          </div>
-          <div className={`presence-pill ${currentUser.isOnline ? "online" : "offline"}`}>
-            {currentUser.isOnline ? t("common.online") : t("common.offline")}
-          </div>
-        </div>
-
-        <div className="user-chip">
+        <div className="user-chip" title={currentUser.displayName}>
           <div className="avatar-badge">
             {currentUser.avatarUrl ? (
               <img
@@ -92,14 +122,13 @@ function Sidebar({
               <span>{currentUser.displayName?.[0]?.toUpperCase() || "U"}</span>
             )}
           </div>
-          <div className="user-chip-text">
-            <strong>{currentUser.displayName}</strong>
-            <span>@{currentUser.userName}</span>
-          </div>
+          <span className={`presence-dot ${currentUser.isOnline ? "online" : "offline"}`} />
         </div>
 
-        <button type="button" className="ghost-button" onClick={onLogout}>
-          {t("sidebar.logout")}
+        <LanguageSwitcher compact />
+
+        <button type="button" className="nav-icon-btn logout-btn" onClick={onLogout} title={t("sidebar.logout")}>
+          <span className="nav-icon-glyph">⏻</span>
         </button>
       </div>
     </aside>

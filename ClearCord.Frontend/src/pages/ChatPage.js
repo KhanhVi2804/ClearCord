@@ -1,17 +1,14 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import AdminPanel from "../components/AdminPanel";
-import ChannelList from "../components/ChannelList";
 import ChatBox from "../components/ChatBox";
-import FriendsPanel from "../components/FriendsPanel";
-import LanguageSwitcher from "../components/LanguageSwitcher";
 import ModalShell from "../components/ModalShell";
-import NotificationsPanel from "../components/NotificationsPanel";
 import ProfilePanel from "../components/ProfilePanel";
-import Sidebar from "../components/Sidebar";
+import SecondaryPanel from "../components/SecondaryPanel";
+import NavRail from "../components/NavRail";
+import ServerRail from "../components/ServerRail";
 import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
 import WorkspaceRail from "../components/WorkspaceRail";
-import WorkspaceTab from "../components/WorkspaceTab";
 import {
   channelApi,
   friendApi,
@@ -120,18 +117,6 @@ function ChatPage({
       ),
     [permissions]
   );
-
-  const onlineServerMembers = useMemo(
-    () => selectedServer?.members?.filter((member) => member.isOnline).length ?? 0,
-    [selectedServer?.members]
-  );
-
-  const onlineFriends = useMemo(
-    () => friends.filter((friend) => friend.isOnline).length,
-    [friends]
-  );
-
-  const activeChannelForRail = activeView === "voice" ? currentVoiceChannel : currentTextChannel;
 
   useEffect(() => {
     chatSignalR.start().catch((error) => {
@@ -712,89 +697,71 @@ function ChatPage({
   return (
     <>
       <main className="chat-page">
-        <Sidebar
-          servers={servers}
-          selectedServerId={selectedServerId}
-          currentUser={currentUser}
-          unreadNotificationCount={unreadNotificationCount}
-          onSelectServer={setSelectedServerId}
-          onOpenCreateServer={() => setIsCreateServerVisible(true)}
-          onOpenJoinServer={() => setIsJoinServerVisible(true)}
-          onLogout={onLogout}
-        />
+        <div className="left-rails">
+          <ServerRail
+            servers={servers}
+            selectedServerId={selectedServerId}
+            activeView={activeView}
+            currentUser={currentUser}
+            onSelectServer={setSelectedServerId}
+            onSelectView={setActiveView}
+            onOpenCreateServer={() => setIsCreateServerVisible(true)}
+            onOpenJoinServer={() => setIsJoinServerVisible(true)}
+            onOpenProfile={() => setActiveView("profile")}
+          />
+          <NavRail
+            activeView={activeView}
+            unreadNotificationCount={unreadNotificationCount}
+            canSeeAdmin={canSeeAdmin}
+            onSelectView={setActiveView}
+            onLogout={onLogout}
+          />
+        </div>
 
-        <ChannelList
-          server={selectedServer}
-          selectedTextChannelId={selectedTextChannelId}
-          activeVoiceChannelId={activeVoiceChannelId}
-          connectionState={connectionState}
-          onSelectChannel={handleSelectChannel}
-        />
+        <div className="secondary-panel">
+          <SecondaryPanel
+            activeView={activeView}
+            server={selectedServer}
+            selectedTextChannelId={selectedTextChannelId}
+            activeVoiceChannelId={activeVoiceChannelId}
+            connectionState={connectionState}
+            onSelectChannel={handleSelectChannel}
+            friends={friends}
+            friendRequests={friendRequests}
+            searchTerm={searchTerm}
+            searchResults={searchResults}
+            isFriendsLoading={isFriendsLoading}
+            socialError={socialError}
+            onSearchTermChange={setSearchTerm}
+            onSendFriendRequest={(targetUserId) =>
+              handleSendFriendRequest(targetUserId).catch((error) => setSocialError(error.message))
+            }
+            onAcceptFriendRequest={(requestId) =>
+              handleAcceptRequest(requestId).catch((error) => setSocialError(error.message))
+            }
+            onRejectFriendRequest={(requestId) =>
+              handleRejectRequest(requestId).catch((error) => setSocialError(error.message))
+            }
+            onUnfriend={(friendUserId) =>
+              handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))
+            }
+            onViewProfile={(userId) =>
+              handleViewUserProfile(userId).catch((error) => setSocialError(error.message))
+            }
+            notifications={notifications}
+            onOpenNotification={(notification) =>
+              handleOpenNotification(notification).catch((error) => setSocialError(error.message))
+            }
+            onMarkNotificationRead={(notificationId) =>
+              handleMarkNotificationRead(notificationId).catch((error) => setSocialError(error.message))
+            }
+            onMarkAllNotificationsRead={() =>
+              handleMarkAllNotificationsRead().catch((error) => setSocialError(error.message))
+            }
+          />
+        </div>
 
         <div className="chat-stage">
-          <div className="chat-stage-topbar workspace-topbar">
-            <div className="workspace-summary">
-              <div>
-                <p className="eyebrow">{t("workspace.signedIn")}</p>
-                <h1>{currentUser.displayName}</h1>
-                <span className="topbar-subcopy">
-                  {selectedServer
-                    ? t("workspace.workingInside", { server: selectedServer.name })
-                    : t("workspace.noServerSelected")}
-                </span>
-              </div>
-
-              <div className="status-card-group">
-                <div className="status-card">
-                  <span>{t("workspace.membersOnline")}</span>
-                  <strong>{onlineServerMembers}</strong>
-                </div>
-                <div className="status-card">
-                  <span>{t("workspace.friendsOnline")}</span>
-                  <strong>{onlineFriends}</strong>
-                </div>
-                <div className="status-card">
-                  <span>{t("workspace.unreadAlerts")}</span>
-                  <strong>{unreadNotificationCount}</strong>
-                </div>
-                <div className="status-card">
-                  <span>{t("workspace.liveConnection")}</span>
-                  <strong>{t(`channel.connection${connectionState[0].toUpperCase()}${connectionState.slice(1)}`)}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="header-actions">
-              <div className="inline-actions">
-                <button type="button" className="ghost-button compact" onClick={() => setIsCreateServerVisible(true)}>
-                  {t("workspace.createServer")}
-                </button>
-                <button type="button" className="ghost-button compact" onClick={() => setIsJoinServerVisible(true)}>
-                  {t("workspace.joinWithInvite")}
-                </button>
-                <LanguageSwitcher compact />
-              </div>
-
-              <div className="workspace-tabs">
-                <WorkspaceTab id="chat" activeView={activeView} onSelect={setActiveView}>{t("tabs.chat")}</WorkspaceTab>
-                <WorkspaceTab id="friends" activeView={activeView} onSelect={setActiveView}>{t("tabs.friends")}</WorkspaceTab>
-                <WorkspaceTab id="voice" activeView={activeView} onSelect={setActiveView}>{t("tabs.calls")}</WorkspaceTab>
-                <WorkspaceTab
-                  id="notifications"
-                  activeView={activeView}
-                  onSelect={setActiveView}
-                  badge={unreadNotificationCount}
-                >
-                  {t("tabs.alerts")}
-                </WorkspaceTab>
-                {canSeeAdmin && (
-                  <WorkspaceTab id="admin" activeView={activeView} onSelect={setActiveView}>{t("tabs.admin")}</WorkspaceTab>
-                )}
-                <WorkspaceTab id="profile" activeView={activeView} onSelect={setActiveView}>{t("tabs.profile")}</WorkspaceTab>
-              </div>
-            </div>
-          </div>
-
           {hasNoServers ? (
             <section className="chat-panel empty-state-shell">
               <div className="empty-state-card">
@@ -835,7 +802,7 @@ function ChatPage({
                 </form>
               </div>
             </section>
-          ) : activeView === "chat" ? (
+          ) : (
             <ChatBox
               currentUser={currentUser}
               currentServer={selectedServer}
@@ -861,59 +828,11 @@ function ChatPage({
               onToggleReaction={handleToggleReaction}
               onViewUserProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
             />
-          ) : activeView === "friends" ? (
-            <FriendsPanel
-              friends={friends}
-              requests={friendRequests}
-              searchTerm={searchTerm}
-              searchResults={searchResults}
-              isLoading={isFriendsLoading}
-              error={socialError}
-              onSearchTermChange={setSearchTerm}
-              onSendRequest={(targetUserId) => handleSendFriendRequest(targetUserId).catch((error) => setSocialError(error.message))}
-              onAcceptRequest={(requestId) => handleAcceptRequest(requestId).catch((error) => setSocialError(error.message))}
-              onRejectRequest={(requestId) => handleRejectRequest(requestId).catch((error) => setSocialError(error.message))}
-              onUnfriend={(friendUserId) => handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))}
-              onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
-            />
-          ) : activeView === "notifications" ? (
-            <NotificationsPanel
-              notifications={notifications}
-              onOpenNotification={(notification) => handleOpenNotification(notification).catch((error) => setSocialError(error.message))}
-              onMarkRead={(notificationId) => handleMarkNotificationRead(notificationId).catch((error) => setSocialError(error.message))}
-              onMarkAllRead={() => handleMarkAllNotificationsRead().catch((error) => setSocialError(error.message))}
-            />
-          ) : activeView === "voice" ? (
-            <VoicePanel currentUser={currentUser} currentChannel={currentVoiceChannel} />
-          ) : activeView === "admin" ? (
-            <AdminPanel
-              server={selectedServer}
-              invite={serverInvite}
-              permissions={permissions}
-              onUpdateServer={async (serverId, payload) => { await serverApi.updateServer(serverId, payload); await refreshSelectedServer(serverId); }}
-              onDeleteServer={async (serverId) => { await serverApi.deleteServer(serverId); await refreshServers(); setActiveView("chat"); }}
-              onLeaveServer={async (serverId) => { await serverApi.leaveServer(serverId); await refreshServers(); setActiveView("chat"); }}
-              onCreateCategory={async (serverId, payload) => { await channelApi.createCategory(serverId, payload); await refreshSelectedServer(serverId); }}
-              onUpdateCategory={async (categoryId, payload) => { await channelApi.updateCategory(categoryId, payload); await refreshSelectedServer(); }}
-              onDeleteCategory={async (categoryId) => { await channelApi.deleteCategory(categoryId); await refreshSelectedServer(); }}
-              onCreateChannel={async (serverId, payload) => { await channelApi.createChannel(serverId, payload); await refreshSelectedServer(serverId); }}
-              onUpdateChannel={async (channelId, payload) => { await channelApi.updateChannel(channelId, payload); await refreshSelectedServer(); }}
-              onDeleteChannel={async (channelId) => { await channelApi.deleteChannel(channelId); await refreshSelectedServer(); }}
-              onCreateRole={async (serverId, payload) => { await serverApi.createRole(serverId, payload); await refreshSelectedServer(serverId); }}
-              onAssignRole={async (serverId, roleId, userId) => { await serverApi.assignRole(serverId, roleId, userId); await refreshSelectedServer(serverId); }}
-              onKickMember={async (serverId, userId, reason) => { await serverApi.kickMember(serverId, userId, reason); await refreshSelectedServer(serverId); }}
-              onBanMember={async (serverId, userId, reason) => { await serverApi.banMember(serverId, userId, reason); await refreshSelectedServer(serverId); }}
-            />
-          ) : (
-            <ProfilePanel currentUser={currentUser} onSaveProfile={handleSaveProfile} onUploadAvatar={handleUploadAvatar} />
           )}
         </div>
 
         <WorkspaceRail
           server={selectedServer}
-          invite={serverInvite}
-          currentChannel={activeChannelForRail}
-          unreadNotificationCount={unreadNotificationCount}
           onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
         />
       </main>
@@ -991,6 +910,86 @@ function ChatPage({
             setUserProfileError("");
           }}
         />
+      )}
+
+      {activeView === "profile" && (
+        <ModalShell wide bare onClose={() => setActiveView("chat")}>
+          <ProfilePanel
+            currentUser={currentUser}
+            onSaveProfile={handleSaveProfile}
+            onUploadAvatar={handleUploadAvatar}
+          />
+        </ModalShell>
+      )}
+
+      {activeView === "admin" && (
+        <ModalShell wide bare onClose={() => setActiveView("chat")}>
+          <AdminPanel
+            server={selectedServer}
+            invite={serverInvite}
+            permissions={permissions}
+            onUpdateServer={async (serverId, payload) => {
+              await serverApi.updateServer(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onDeleteServer={async (serverId) => {
+              await serverApi.deleteServer(serverId);
+              await refreshServers();
+              setActiveView("chat");
+            }}
+            onLeaveServer={async (serverId) => {
+              await serverApi.leaveServer(serverId);
+              await refreshServers();
+              setActiveView("chat");
+            }}
+            onCreateCategory={async (serverId, payload) => {
+              await channelApi.createCategory(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onUpdateCategory={async (categoryId, payload) => {
+              await channelApi.updateCategory(categoryId, payload);
+              await refreshSelectedServer();
+            }}
+            onDeleteCategory={async (categoryId) => {
+              await channelApi.deleteCategory(categoryId);
+              await refreshSelectedServer();
+            }}
+            onCreateChannel={async (serverId, payload) => {
+              await channelApi.createChannel(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onUpdateChannel={async (channelId, payload) => {
+              await channelApi.updateChannel(channelId, payload);
+              await refreshSelectedServer();
+            }}
+            onDeleteChannel={async (channelId) => {
+              await channelApi.deleteChannel(channelId);
+              await refreshSelectedServer();
+            }}
+            onCreateRole={async (serverId, payload) => {
+              await serverApi.createRole(serverId, payload);
+              await refreshSelectedServer(serverId);
+            }}
+            onAssignRole={async (serverId, roleId, userId) => {
+              await serverApi.assignRole(serverId, roleId, userId);
+              await refreshSelectedServer(serverId);
+            }}
+            onKickMember={async (serverId, userId, reason) => {
+              await serverApi.kickMember(serverId, userId, reason);
+              await refreshSelectedServer(serverId);
+            }}
+            onBanMember={async (serverId, userId, reason) => {
+              await serverApi.banMember(serverId, userId, reason);
+              await refreshSelectedServer(serverId);
+            }}
+          />
+        </ModalShell>
+      )}
+
+      {activeView === "voice" && (
+        <ModalShell wide bare onClose={() => setActiveView("chat")}>
+          <VoicePanel currentUser={currentUser} currentChannel={currentVoiceChannel} />
+        </ModalShell>
       )}
     </>
   );

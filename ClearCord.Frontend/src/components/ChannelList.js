@@ -46,12 +46,8 @@ function ChannelList({
   return (
     <aside className="channel-panel">
       <div className="channel-panel-header">
-        <div>
-          <p className="eyebrow">{t("channel.heading")}</p>
-          <h2>{server?.name ?? t("channel.noServer")}</h2>
-        </div>
-
-        <span className={`connection-pill ${connectionState}`}>
+        <h2>{server?.name ?? t("channel.noServer")}</h2>
+        <span className={`connection-pill ${connectionState}`} title={t("workspace.liveConnection")}>
           {t(`channel.connection${connectionState[0].toUpperCase()}${connectionState.slice(1)}`)}
         </span>
       </div>
