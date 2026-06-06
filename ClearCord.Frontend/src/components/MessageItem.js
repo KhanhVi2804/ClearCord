@@ -121,6 +121,49 @@ function MessageItem({
         )}
       </button>
 
+      <div className="message-controls" role="toolbar" aria-label="Message actions">
+        <div className="message-actions">
+          {!message.isDeleted && (
+            <button type="button" className="chip-button" onClick={() => runAction(() => onReply(message))}>
+              {t("common.reply")}
+            </button>
+          )}
+
+          {canEdit && !message.isDeleted && (
+            <button type="button" className="chip-button" onClick={() => runAction(() => onStartEdit(message))}>
+              {t("common.edit")}
+            </button>
+          )}
+
+          {canDelete && (
+            <button type="button" className="chip-button danger" onClick={() => runAction(() => onDelete(message))}>
+              {t("common.delete")}
+            </button>
+          )}
+
+          {canPin && (
+            <button type="button" className="chip-button" onClick={() => runAction(() => onTogglePin(message))}>
+              {message.isPinned ? t("chat.unpin") : t("chat.pin")}
+            </button>
+          )}
+        </div>
+
+        {!message.isDeleted && (
+          <div className="quick-reaction-strip" aria-label="Quick reactions">
+            {QUICK_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className="reaction-picker"
+                onClick={() => runAction(() => onToggleReaction(message, emoji, false))}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="message-body">
         <div className="message-meta">
           <button
@@ -143,49 +186,6 @@ function MessageItem({
             })}
           </div>
         )}
-
-        <div className="message-controls" role="toolbar" aria-label="Message actions">
-          <div className="message-actions">
-            {!message.isDeleted && (
-              <button type="button" className="chip-button" onClick={() => runAction(() => onReply(message))}>
-                {t("common.reply")}
-              </button>
-            )}
-
-            {canEdit && !message.isDeleted && (
-              <button type="button" className="chip-button" onClick={() => runAction(() => onStartEdit(message))}>
-                {t("common.edit")}
-              </button>
-            )}
-
-            {canDelete && (
-              <button type="button" className="chip-button danger" onClick={() => runAction(() => onDelete(message))}>
-                {t("common.delete")}
-              </button>
-            )}
-
-            {canPin && (
-              <button type="button" className="chip-button" onClick={() => runAction(() => onTogglePin(message))}>
-                {message.isPinned ? t("chat.unpin") : t("chat.pin")}
-              </button>
-            )}
-          </div>
-
-          {!message.isDeleted && (
-            <div className="quick-reaction-strip" aria-label="Quick reactions">
-              {QUICK_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className="reaction-picker"
-                  onClick={() => runAction(() => onToggleReaction(message, emoji, false))}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {isEditing ? (
           <form

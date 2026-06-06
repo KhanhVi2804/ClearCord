@@ -967,6 +967,7 @@ select:focus {
 .message-row {
   display: flex;
   justify-content: flex-start;
+  min-width: 0;
 }
 
 .message-row.own {
@@ -979,10 +980,15 @@ select:focus {
   align-items: flex-start;
   max-width: min(100%, 820px);
   position: relative;
+  min-width: 0;
 }
 
 .message-item.own {
   flex-direction: row-reverse;
+}
+
+.message-item.menu-open {
+  padding-top: 2.2rem;
 }
 
 .message-avatar {
@@ -997,7 +1003,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  position: relative;
+  min-width: 0;
 }
 
 .message-item.own .message-body {
@@ -1735,12 +1741,15 @@ select:focus {
 
 .message-controls {
   position: absolute;
-  top: -1.15rem;
-  left: 0;
+  top: -2.65rem;
+  left: 56px;
   z-index: 8;
   display: flex;
   align-items: center;
   gap: 0.45rem;
+  max-width: min(760px, calc(100vw - 4rem));
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 0.35rem;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1755,7 +1764,7 @@ select:focus {
 }
 
 .message-item.own .message-controls {
-  right: 0;
+  right: 56px;
   left: auto;
 }
 
@@ -1763,7 +1772,8 @@ select:focus {
 .quick-reaction-strip {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex: none;
+  flex-wrap: nowrap;
   gap: 0.35rem;
 }
 
