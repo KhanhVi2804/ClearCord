@@ -978,6 +978,7 @@ select:focus {
   gap: 0.9rem;
   align-items: flex-start;
   max-width: min(100%, 820px);
+  position: relative;
 }
 
 .message-item.own {
@@ -996,6 +997,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  position: relative;
 }
 
 .message-item.own .message-body {
@@ -1074,7 +1076,9 @@ select:focus {
 
 .message-item.own .attachment-stack,
 .message-item.own .reaction-row,
-.message-item.own .message-actions {
+.message-item.own .message-controls,
+.message-item.own .message-actions,
+.message-item.own .quick-reaction-strip {
   justify-content: flex-end;
 }
 
@@ -1729,18 +1733,53 @@ select:focus {
   font-size: 0.9rem;
 }
 
-.message-actions {
-  justify-content: flex-start;
-  flex-wrap: wrap;
+.message-controls {
+  position: absolute;
+  top: -1.15rem;
+  left: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(28, 30, 36, 0.96);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease;
+  transform: translateY(4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
 }
 
-.message-item:hover .message-actions,
-.message-item:focus-within .message-actions {
+.message-item.own .message-controls {
+  right: 0;
+  left: auto;
+}
+
+.message-actions,
+.quick-reaction-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.message-item:hover .message-controls,
+.message-item:focus-within .message-controls,
+.message-item.menu-open .message-controls {
   opacity: 1;
   pointer-events: auto;
+  transform: translateY(0);
+}
+
+.message-controls .chip-button,
+.message-controls .reaction-picker {
+  padding: 0.32rem 0.62rem;
+  background: rgba(255, 255, 255, 0.055);
+  white-space: nowrap;
 }
 
 .message-edit-form {
@@ -2040,11 +2079,6 @@ select:focus {
 
   .composer {
     grid-template-columns: 1fr;
-  }
-
-  .message-actions {
-    opacity: 1;
-    pointer-events: auto;
   }
 
   .feature-panel-header,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toAssetUrl } from "../services/api";
 import { useI18n } from "../i18n";
 
@@ -47,6 +47,8 @@ function MessageItem({
 }) {
   const { t, formatTime } = useI18n();
   const [editDraft, setEditDraft] = useState(message.content || "");
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const articleRef = useRef(null);
   const sender = message.sender ?? {};
   const initials =
     sender.displayName?.[0]?.toUpperCase() || sender.userName?.[0]?.toUpperCase() || "U";
@@ -62,8 +64,48 @@ function MessageItem({
     }
   }, [isEditing, message.content]);
 
+  useEffect(() => {
+    if (!isActionMenuOpen) {
+      return undefined;
+    }
+
+    function handleDocumentClick(event) {
+      if (articleRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setIsActionMenuOpen(false);
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsActionMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("click", handleDocumentClick);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("click", handleDocumentClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isActionMenuOpen]);
+
+  function runAction(action) {
+    setIsActionMenuOpen(false);
+    action();
+  }
+
   return (
-    <article className={`message-item ${isOwnMessage ? "own" : ""}`}>
+    <article
+      ref={articleRef}
+      className={`message-item ${isOwnMessage ? "own" : ""} ${isActionMenuOpen ? "menu-open" : ""}`}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setIsActionMenuOpen(true);
+      }}
+    >
       <button
         type="button"
         className="avatar-badge message-avatar message-profile-trigger"
@@ -102,29 +144,46 @@ function MessageItem({
           </div>
         )}
 
-        <div className="message-actions">
+        <div className="message-controls" role="toolbar" aria-label="Message actions">
+          <div className="message-actions">
+            {!message.isDeleted && (
+              <button type="button" className="chip-button" onClick={() => runAction(() => onReply(message))}>
+                {t("common.reply")}
+              </button>
+            )}
+
+            {canEdit && !message.isDeleted && (
+              <button type="button" className="chip-button" onClick={() => runAction(() => onStartEdit(message))}>
+                {t("common.edit")}
+              </button>
+            )}
+
+            {canDelete && (
+              <button type="button" className="chip-button danger" onClick={() => runAction(() => onDelete(message))}>
+                {t("common.delete")}
+              </button>
+            )}
+
+            {canPin && (
+              <button type="button" className="chip-button" onClick={() => runAction(() => onTogglePin(message))}>
+                {message.isPinned ? t("chat.unpin") : t("chat.pin")}
+              </button>
+            )}
+          </div>
+
           {!message.isDeleted && (
-            <button type="button" className="chip-button" onClick={() => onReply(message)}>
-              {t("common.reply")}
-            </button>
-          )}
-
-          {canEdit && !message.isDeleted && (
-            <button type="button" className="chip-button" onClick={() => onStartEdit(message)}>
-              {t("common.edit")}
-            </button>
-          )}
-
-          {canDelete && (
-            <button type="button" className="chip-button danger" onClick={() => onDelete(message)}>
-              {t("common.delete")}
-            </button>
-          )}
-
-          {canPin && (
-            <button type="button" className="chip-button" onClick={() => onTogglePin(message)}>
-              {message.isPinned ? t("chat.unpin") : t("chat.pin")}
-            </button>
+            <div className="quick-reaction-strip" aria-label="Quick reactions">
+              {QUICK_REACTIONS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="reaction-picker"
+                  onClick={() => runAction(() => onToggleReaction(message, emoji, false))}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -185,31 +244,21 @@ function MessageItem({
           </div>
         )}
 
-        <div className="reaction-row">
-          {groupedReactions.map((reaction) => (
-            <button
-              key={reaction.emoji}
-              type="button"
-              className={`reaction-chip ${reaction.reactedByCurrentUser ? "active" : ""}`}
-              onClick={() => onToggleReaction(message, reaction.emoji, reaction.reactedByCurrentUser)}
-            >
-              <span>{reaction.emoji}</span>
-              <strong>{reaction.count}</strong>
-            </button>
-          ))}
-
-          {!message.isDeleted &&
-            QUICK_REACTIONS.map((emoji) => (
+        {groupedReactions.length > 0 && (
+          <div className="reaction-row">
+            {groupedReactions.map((reaction) => (
               <button
-                key={emoji}
+                key={reaction.emoji}
                 type="button"
-                className="reaction-picker"
-                onClick={() => onToggleReaction(message, emoji, false)}
+                className={`reaction-chip ${reaction.reactedByCurrentUser ? "active" : ""}`}
+                onClick={() => onToggleReaction(message, reaction.emoji, reaction.reactedByCurrentUser)}
               >
-                {emoji}
+                <span>{reaction.emoji}</span>
+                <strong>{reaction.count}</strong>
               </button>
             ))}
-        </div>
+          </div>
+        )}
       </div>
     </article>
   );
