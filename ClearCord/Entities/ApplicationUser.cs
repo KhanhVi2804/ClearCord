@@ -19,4 +19,5 @@ public sealed class ApplicationUser : IdentityUser
     public ICollection<UserNotification> Notifications { get; set; } = new List<UserNotification>();
     public ICollection<UserConnection> Connections { get; set; } = new List<UserConnection>();
     public ICollection<VoiceChannelParticipant> VoiceParticipations { get; set; } = new List<VoiceChannelParticipant>();
+    public ICollection<DirectVoiceParticipant> DirectVoiceParticipations { get; set; } = new List<DirectVoiceParticipant>();
 }

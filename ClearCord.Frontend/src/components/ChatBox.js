@@ -51,7 +51,9 @@ function ChatBox({
     };
   }, []);
 
-  if (!currentServer) {
+  const isDirectConversation = Boolean(currentChannel?.isDirect);
+
+  if (!currentServer && !isDirectConversation) {
     return (
       <section className="chat-panel empty-panel">
         <p>{t("chat.selectServer")}</p>
@@ -122,7 +124,7 @@ function ChatBox({
     <section className="chat-panel">
       <header className="chat-header">
         <div className="chat-header-main">
-          <span className="channel-hash">#</span>
+          <span className="channel-hash">{isDirectConversation ? "@" : "#"}</span>
           <h2>{currentChannel.name}</h2>
           {currentChannel.topic ? (
             <>

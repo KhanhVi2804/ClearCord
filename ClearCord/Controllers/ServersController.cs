@@ -2,6 +2,7 @@ using ClearCord.Common.Extensions;
 using ClearCord.DTOs;
 using ClearCord.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClearCord.Controllers;
@@ -38,6 +39,14 @@ public sealed class ServersController(IServerService serverService) : Controller
     {
         var userId = User.GetRequiredUserId();
         return Ok(await serverService.UpdateAsync(serverId, userId, request, cancellationToken));
+    }
+
+    [HttpPost("{serverId:guid}/icon")]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    public async Task<ActionResult<ServerSummaryDto>> UploadIcon(Guid serverId, [FromForm] IFormFile icon, CancellationToken cancellationToken)
+    {
+        var userId = User.GetRequiredUserId();
+        return Ok(await serverService.UploadIconAsync(serverId, userId, icon, cancellationToken));
     }
 
     [HttpDelete("{serverId:guid}")]

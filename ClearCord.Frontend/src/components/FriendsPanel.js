@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { toAssetUrl } from "../services/api";
 import { useI18n } from "../i18n";
 
@@ -43,9 +44,27 @@ function FriendsPanel({
   onAcceptRequest,
   onRejectRequest,
   onUnfriend,
+  onStartDirectChat,
+  onStartDirectCall,
   onViewProfile
 }) {
   const { t } = useI18n();
+  const [pendingDirectAction, setPendingDirectAction] = useState(null);
+
+  async function handleDirectAction(friendUserId, action) {
+    const actionKey = `${action}:${friendUserId}`;
+    setPendingDirectAction(actionKey);
+
+    try {
+      if (action === "chat") {
+        await onStartDirectChat?.(friendUserId);
+      } else {
+        await onStartDirectCall?.(friendUserId);
+      }
+    } finally {
+      setPendingDirectAction(null);
+    }
+  }
 
   return (
     <section className="feature-panel">
@@ -143,33 +162,54 @@ function FriendsPanel({
           <p className="muted-copy">{t("friends.loadingFriends")}</p>
         ) : (
           <div className="list-stack">
-            {friends.map((friend) => (
-              <UserRow
-                key={friend.userId}
-                user={{
-                  id: friend.userId,
-                  userName: friend.userName,
-                  displayName: friend.displayName,
-                  avatarUrl: friend.avatarUrl
-                }}
-                subtitle={friend.isOnline ? t("common.online").toLowerCase() : t("common.offline").toLowerCase()}
-              >
-                <button
-                  type="button"
-                  className="ghost-button compact"
-                  onClick={() => onViewProfile?.(friend.userId)}
+            {friends.map((friend) => {
+              const isOpeningChat = pendingDirectAction === `chat:${friend.userId}`;
+              const isOpeningCall = pendingDirectAction === `call:${friend.userId}`;
+
+              return (
+                <UserRow
+                  key={friend.userId}
+                  user={{
+                    id: friend.userId,
+                    userName: friend.userName,
+                    displayName: friend.displayName,
+                    avatarUrl: friend.avatarUrl
+                  }}
+                  subtitle={friend.isOnline ? t("common.online").toLowerCase() : t("common.offline").toLowerCase()}
                 >
-                  {t("friends.viewProfile")}
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button compact"
-                  onClick={() => onUnfriend(friend.userId)}
-                >
-                  {t("friends.unfriend")}
-                </button>
-              </UserRow>
-            ))}
+                  <button
+                    type="button"
+                    className="primary-button compact"
+                    onClick={() => handleDirectAction(friend.userId, "chat").catch(() => {})}
+                    disabled={Boolean(pendingDirectAction)}
+                  >
+                    {isOpeningChat ? t("common.loading") : t("friends.message")}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button compact"
+                    onClick={() => handleDirectAction(friend.userId, "call").catch(() => {})}
+                    disabled={Boolean(pendingDirectAction)}
+                  >
+                    {isOpeningCall ? t("common.loading") : t("friends.call")}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button compact"
+                    onClick={() => onViewProfile?.(friend.userId)}
+                  >
+                    {t("friends.viewProfile")}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button compact"
+                    onClick={() => onUnfriend(friend.userId)}
+                  >
+                    {t("friends.unfriend")}
+                  </button>
+                </UserRow>
+              );
+            })}
 
             {!friends.length && <p className="muted-copy">{t("friends.noFriends")}</p>}
           </div>

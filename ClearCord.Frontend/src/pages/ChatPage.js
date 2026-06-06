@@ -11,6 +11,7 @@ import VoicePanel from "../components/VoicePanel";
 import WorkspaceRail from "../components/WorkspaceRail";
 import {
   channelApi,
+  directApi,
   friendApi,
   messageApi,
   notificationApi,
@@ -45,6 +46,9 @@ function ChatPage({
   const [activeVoiceChannelId, setActiveVoiceChannelId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [friends, setFriends] = useState([]);
+  const [directConversations, setDirectConversations] = useState([]);
+  const [selectedDirectConversation, setSelectedDirectConversation] = useState(null);
+  const [directVoiceConversation, setDirectVoiceConversation] = useState(null);
   const [friendRequests, setFriendRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -75,6 +79,7 @@ function ChatPage({
   const [isUserProfileLoading, setIsUserProfileLoading] = useState(false);
   const [userProfileError, setUserProfileError] = useState("");
   const previousTextChannelIdRef = useRef(null);
+  const previousDirectConversationIdRef = useRef(null);
   const processedInviteCodeRef = useRef(null);
 
   const currentTextChannel = useMemo(
@@ -86,6 +91,32 @@ function ChatPage({
     () => selectedServer?.channels?.find((channel) => channel.id === activeVoiceChannelId) ?? null,
     [activeVoiceChannelId, selectedServer]
   );
+
+  const currentDirectChannel = useMemo(
+    () =>
+      selectedDirectConversation
+        ? {
+            id: selectedDirectConversation.id,
+            name: selectedDirectConversation.otherUser?.displayName || selectedDirectConversation.otherUser?.userName || "Direct message",
+            topic: "Direct message",
+            isDirect: true
+          }
+        : null,
+    [selectedDirectConversation]
+  );
+
+  const currentChatChannel = currentDirectChannel ?? currentTextChannel;
+  const currentChatServer = currentDirectChannel
+    ? { id: "direct", name: "Direct Messages" }
+    : selectedServer;
+
+  const currentVoiceTarget = directVoiceConversation
+    ? {
+        id: directVoiceConversation.id,
+        name: directVoiceConversation.otherUser?.displayName || directVoiceConversation.otherUser?.userName || "Direct call",
+        isDirect: true
+      }
+    : currentVoiceChannel;
 
   const permissions = useMemo(
     () => computePermissions(selectedServer, currentUser.id),
@@ -127,12 +158,18 @@ function ChatPage({
   useEffect(() => {
     const unsubscribeConnection = chatSignalR.onConnectionStateChanged(setConnectionState);
     const unsubscribeCreated = chatSignalR.onMessageCreated((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribeUpdated = chatSignalR.onMessageUpdated((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
@@ -140,12 +177,18 @@ function ChatPage({
       setMessages((current) => markMessageDeleted(current, messageId));
     });
     const unsubscribeReactions = chatSignalR.onMessageReactionChanged((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribePinned = chatSignalR.onMessagePinnedChanged((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
@@ -192,7 +235,11 @@ function ChatPage({
         );
       });
     const unsubscribeTyping = chatSignalR.onTypingChanged((payload) => {
-      if (payload.channelId === selectedTextChannelId && payload.userId !== currentUser.id) {
+      if (
+        ((!selectedDirectConversation && payload.channelId === selectedTextChannelId) ||
+          payload.directConversationId === selectedDirectConversation?.id) &&
+        payload.userId !== currentUser.id
+      ) {
         setTypingUsersMap((current) => new Map(current).set(payload.userId, payload.isTyping));
       }
     });
@@ -208,7 +255,7 @@ function ChatPage({
       unsubscribePresence();
       unsubscribeTyping();
     };
-  }, [currentUser, onCurrentUserChange, selectedTextChannelId]);
+  }, [currentUser, onCurrentUserChange, selectedDirectConversation?.id, selectedTextChannelId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -220,11 +267,12 @@ function ChatPage({
       setSocialError("");
 
       try {
-        const [serverList, nextFriends, nextRequests, nextNotifications] = await Promise.all([
+        const [serverList, nextFriends, nextRequests, nextNotifications, nextDirectConversations] = await Promise.all([
           serverApi.getServers(),
           friendApi.getFriends(),
           friendApi.getRequests(),
-          notificationApi.getMine()
+          notificationApi.getMine(),
+          directApi.getConversations()
         ]);
 
         if (!isMounted) {
@@ -233,6 +281,7 @@ function ChatPage({
 
         setServers(serverList);
         setFriends(nextFriends);
+        setDirectConversations(nextDirectConversations);
         setFriendRequests(nextRequests);
         setNotifications(sortNotifications(nextNotifications));
         setSelectedServerId((current) =>
@@ -332,6 +381,10 @@ function ChatPage({
       setReplyToMessage(null);
       setEditingMessageId(null);
 
+      if (selectedDirectConversation) {
+        return;
+      }
+
       if (previousTextChannelIdRef.current && previousTextChannelIdRef.current !== selectedTextChannelId) {
         try {
           await chatSignalR.leaveChannel(previousTextChannelIdRef.current);
@@ -372,7 +425,76 @@ function ChatPage({
     return () => {
       isMounted = false;
     };
-  }, [selectedTextChannelId]);
+  }, [selectedDirectConversation, selectedTextChannelId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function syncDirectConversationState() {
+      const previousConversationId = previousDirectConversationIdRef.current;
+      const nextConversationId = selectedDirectConversation?.id ?? null;
+
+      if (
+        previousConversationId &&
+        previousConversationId !== nextConversationId &&
+        previousConversationId !== directVoiceConversation?.id
+      ) {
+        try {
+          await chatSignalR.leaveDirectConversation(previousConversationId);
+        } catch (error) {
+          console.warn("Failed to leave previous direct conversation.", error);
+        }
+      }
+
+      if (!selectedDirectConversation) {
+        if (previousConversationId !== directVoiceConversation?.id) {
+          previousDirectConversationIdRef.current = null;
+        }
+        return;
+      }
+
+      setSendError("");
+      setMessageError("");
+      setTypingUsersMap(new Map());
+      setReplyToMessage(null);
+      setEditingMessageId(null);
+      setIsMessagesLoading(true);
+
+      if (previousTextChannelIdRef.current) {
+        try {
+          await chatSignalR.leaveChannel(previousTextChannelIdRef.current);
+        } catch (error) {
+          console.warn("Failed to leave previous channel.", error);
+        }
+
+        previousTextChannelIdRef.current = null;
+      }
+
+      try {
+        await chatSignalR.joinDirectConversation(selectedDirectConversation.id);
+        const directMessages = await directApi.getMessages(selectedDirectConversation.id);
+
+        if (isMounted) {
+          previousDirectConversationIdRef.current = selectedDirectConversation.id;
+          setMessages(directMessages);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessageError(error.message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsMessagesLoading(false);
+        }
+      }
+    }
+
+    syncDirectConversationState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [directVoiceConversation?.id, selectedDirectConversation]);
 
   useEffect(() => {
     if (!inviteCode || processedInviteCodeRef.current === inviteCode) {
@@ -452,6 +574,18 @@ function ChatPage({
     setFriendRequests(nextRequests);
   }
 
+  async function refreshDirectConversations(preferredConversationId) {
+    const nextConversations = await directApi.getConversations();
+    setDirectConversations(nextConversations);
+
+    if (preferredConversationId) {
+      const preferredConversation = nextConversations.find((conversation) => conversation.id === preferredConversationId);
+      if (preferredConversation) {
+        setSelectedDirectConversation(preferredConversation);
+      }
+    }
+  }
+
   useEffect(() => {
     if (activeView !== "friends") {
       return;
@@ -466,7 +600,21 @@ function ChatPage({
     setSendError("");
 
     try {
-      if (files?.length > 0) {
+      if (selectedDirectConversation) {
+        if (files?.length > 0) {
+          await directApi.createMessageWithFiles(selectedDirectConversation.id, {
+            content,
+            replyToMessageId,
+            files
+          });
+        } else {
+          await chatSignalR.sendDirectMessage({
+            directConversationId: selectedDirectConversation.id,
+            content,
+            replyToMessageId
+          });
+        }
+      } else if (files?.length > 0) {
         await messageApi.createMessageWithFiles(selectedTextChannelId, {
           content,
           replyToMessageId,
@@ -532,6 +680,7 @@ function ChatPage({
   }
 
   function handleSelectChannel(channel) {
+    setSelectedDirectConversation(null);
     if (channel.type === "Voice") {
       setActiveVoiceChannelId(channel.id);
       setActiveView("voice");
@@ -540,6 +689,68 @@ function ChatPage({
 
     setSelectedTextChannelId(channel.id);
     setActiveView("chat");
+  }
+
+  function handleSelectServer(serverId) {
+    setSelectedDirectConversation(null);
+    setSelectedServerId(serverId);
+    setActiveView("chat");
+  }
+
+  function handleSelectView(view) {
+    if (view === "chat") {
+      setSelectedDirectConversation(null);
+    }
+
+    setActiveView(view);
+  }
+
+  async function handleStartDirectChat(friendUserId) {
+    setSocialError("");
+    setMessageError("");
+    setSendError("");
+
+    try {
+      const conversation = await directApi.getOrCreateConversation(friendUserId);
+      setSelectedDirectConversation(conversation);
+      setDirectVoiceConversation(null);
+      setMessages([]);
+      setReplyToMessage(null);
+      setEditingMessageId(null);
+      setDirectConversations((current) => {
+        const withoutCurrent = current.filter((item) => item.id !== conversation.id);
+        return [conversation, ...withoutCurrent];
+      });
+      setActiveView("friends");
+    } catch (error) {
+      setSocialError(error.message);
+      setMessageError(error.message);
+      throw error;
+    }
+  }
+
+  async function handleStartDirectCall(friendUserId) {
+    setSocialError("");
+    setMessageError("");
+    setSendError("");
+
+    try {
+      const conversation = await directApi.getOrCreateConversation(friendUserId);
+      setSelectedDirectConversation(conversation);
+      setDirectVoiceConversation(conversation);
+      setMessages([]);
+      setReplyToMessage(null);
+      setEditingMessageId(null);
+      setDirectConversations((current) => {
+        const withoutCurrent = current.filter((item) => item.id !== conversation.id);
+        return [conversation, ...withoutCurrent];
+      });
+      setActiveView("friends");
+    } catch (error) {
+      setSocialError(error.message);
+      setMessageError(error.message);
+      throw error;
+    }
   }
 
   async function handleSaveEditedMessage(message, draft) {
@@ -620,6 +831,12 @@ function ChatPage({
       return;
     }
 
+    if (relatedEntityType === "directconversation" && notification.relatedEntityId) {
+      await refreshDirectConversations(notification.relatedEntityId);
+      setActiveView("friends");
+      return;
+    }
+
     if (relatedEntityType === "channel" && notification.relatedEntityId) {
       const targetChannelId = notification.relatedEntityId;
 
@@ -686,7 +903,11 @@ function ChatPage({
 
   async function handleTypingChange(channelId, isTyping) {
     try {
-      await chatSignalR.sendTyping(channelId, isTyping);
+      if (selectedDirectConversation) {
+        await chatSignalR.sendDirectTyping(selectedDirectConversation.id, isTyping);
+      } else {
+        await chatSignalR.sendTyping(channelId, isTyping);
+      }
     } catch (error) {
       console.warn("Failed to emit typing state.", error);
     }
@@ -703,8 +924,8 @@ function ChatPage({
             selectedServerId={selectedServerId}
             activeView={activeView}
             currentUser={currentUser}
-            onSelectServer={setSelectedServerId}
-            onSelectView={setActiveView}
+            onSelectServer={handleSelectServer}
+            onSelectView={handleSelectView}
             onOpenCreateServer={() => setIsCreateServerVisible(true)}
             onOpenJoinServer={() => setIsJoinServerVisible(true)}
             onOpenProfile={() => setActiveView("profile")}
@@ -713,7 +934,7 @@ function ChatPage({
             activeView={activeView}
             unreadNotificationCount={unreadNotificationCount}
             canSeeAdmin={canSeeAdmin}
-            onSelectView={setActiveView}
+            onSelectView={handleSelectView}
             onLogout={onLogout}
           />
         </div>
@@ -745,6 +966,8 @@ function ChatPage({
             onUnfriend={(friendUserId) =>
               handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))
             }
+            onStartDirectChat={handleStartDirectChat}
+            onStartDirectCall={handleStartDirectCall}
             onViewProfile={(userId) =>
               handleViewUserProfile(userId).catch((error) => setSocialError(error.message))
             }
@@ -762,7 +985,7 @@ function ChatPage({
         </div>
 
         <div className="chat-stage">
-          {hasNoServers ? (
+          {hasNoServers && !currentDirectChannel ? (
             <section className="chat-panel empty-state-shell">
               <div className="empty-state-card">
                 <p className="eyebrow">{t("workspace.freshWorkspace")}</p>
@@ -805,8 +1028,8 @@ function ChatPage({
           ) : (
             <ChatBox
               currentUser={currentUser}
-              currentServer={selectedServer}
-              currentChannel={currentTextChannel}
+              currentServer={currentChatServer}
+              currentChannel={currentChatChannel}
               messages={messages}
               isLoading={isMessagesLoading}
               error={messageError || serversError}
@@ -814,8 +1037,8 @@ function ChatPage({
               replyToMessage={replyToMessage}
               editingMessageId={editingMessageId}
               typingUsers={typingUsers}
-              canManageMessages={permissions.has("ManageMessages")}
-              canPinMessages={permissions.has("PinMessages")}
+              canManageMessages={!currentDirectChannel && permissions.has("ManageMessages")}
+              canPinMessages={Boolean(currentDirectChannel) || permissions.has("PinMessages")}
               onCancelReply={() => setReplyToMessage(null)}
               onSendMessage={handleSendMessage}
               onTypingChange={handleTypingChange}
@@ -932,6 +1155,11 @@ function ChatPage({
               await serverApi.updateServer(serverId, payload);
               await refreshSelectedServer(serverId);
             }}
+            onUploadServerIcon={async (serverId, file) => {
+              await serverApi.uploadIcon(serverId, file);
+              await refreshSelectedServer(serverId);
+              await refreshServers(serverId);
+            }}
             onDeleteServer={async (serverId) => {
               await serverApi.deleteServer(serverId);
               await refreshServers();
@@ -986,9 +1214,16 @@ function ChatPage({
         </ModalShell>
       )}
 
-      {activeView === "voice" && (
-        <ModalShell wide bare onClose={() => setActiveView("chat")}>
-          <VoicePanel currentUser={currentUser} currentChannel={currentVoiceChannel} />
+      {(activeView === "voice" || directVoiceConversation) && (
+        <ModalShell
+          wide
+          bare
+          onClose={() => {
+            setDirectVoiceConversation(null);
+            setActiveView("chat");
+          }}
+        >
+          <VoicePanel currentUser={currentUser} currentChannel={currentVoiceTarget} />
         </ModalShell>
       )}
     </>

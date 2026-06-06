@@ -17,6 +17,11 @@ public sealed record SendRealtimeMessageRequest(
     string? Content,
     Guid? ReplyToMessageId);
 
+public sealed record SendRealtimeDirectMessageRequest(
+    Guid DirectConversationId,
+    string? Content,
+    Guid? ReplyToMessageId);
+
 public sealed record UpdateMessageRequest(
     [param: Required, MaxLength(4000)] string Content);
 
@@ -44,7 +49,8 @@ public sealed record MessageReferenceDto(
 
 public sealed record MessageDto(
     Guid Id,
-    Guid ChannelId,
+    Guid? ChannelId,
+    Guid? DirectConversationId,
     string? Content,
     bool IsEdited,
     bool IsDeleted,

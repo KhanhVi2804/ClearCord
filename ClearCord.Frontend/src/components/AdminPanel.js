@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ModalShell from "./ModalShell";
 import { useI18n } from "../i18n";
+import { toAssetUrl } from "../services/api";
 
 const PERMISSION_OPTIONS = [
   "ViewChannels",
@@ -187,6 +188,7 @@ function AdminPanel({
   invite,
   permissions,
   onUpdateServer,
+  onUploadServerIcon,
   onDeleteServer,
   onLeaveServer,
   onCreateCategory,
@@ -265,6 +267,16 @@ function AdminPanel({
     [server?.members]
   );
 
+  const serverInitials = useMemo(() => {
+    if (!server?.name) return "S";
+    return server.name
+      .split(" ")
+      .slice(0, 2)
+      .map((chunk) => chunk[0])
+      .join("")
+      .toUpperCase();
+  }, [server?.name]);
+
   const permissionLabel = (permission) => t(`permissions.${permission}`);
 
   if (!server) {
@@ -316,6 +328,41 @@ function AdminPanel({
           <div className="section-heading">
             <h3>{t("admin.serverSettings")}</h3>
             <span className="mini-pill">{server.members.length} {t("common.members").toLowerCase()}</span>
+          </div>
+
+          <div className="profile-hero" style={{ marginBottom: "1.5rem", gap: "1.5rem", alignItems: "center" }}>
+            <div className="profile-avatar-large" style={{ width: "80px", height: "80px", fontSize: "2rem" }}>
+              {server.iconUrl ? (
+                <img
+                  src={toAssetUrl(server.iconUrl)}
+                  alt={server.name}
+                  className="avatar-image"
+                />
+              ) : (
+                <span>{serverInitials}</span>
+              )}
+            </div>
+            {canManageServer && (
+              <label className="file-upload-button profile-upload" style={{ margin: 0 }}>
+                {t("profile.uploadAvatar") || "Upload Icon"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) {
+                      return;
+                    }
+
+                    runAction(async () => {
+                      await onUploadServerIcon(server.id, file);
+                      setSuccess(t("admin.iconUpdated") || "Server icon updated successfully.");
+                    });
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            )}
           </div>
 
           <label>

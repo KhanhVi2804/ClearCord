@@ -20,6 +20,8 @@ function SecondaryPanel({
   onAcceptFriendRequest,
   onRejectFriendRequest,
   onUnfriend,
+  onStartDirectChat,
+  onStartDirectCall,
   onViewProfile,
   notifications,
   onOpenNotification,
@@ -40,6 +42,8 @@ function SecondaryPanel({
         onAcceptRequest={onAcceptFriendRequest}
         onRejectRequest={onRejectFriendRequest}
         onUnfriend={onUnfriend}
+        onStartDirectChat={onStartDirectChat}
+        onStartDirectCall={onStartDirectCall}
         onViewProfile={onViewProfile}
       />
     );

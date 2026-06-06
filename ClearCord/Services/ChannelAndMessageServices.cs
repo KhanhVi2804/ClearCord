@@ -130,6 +130,7 @@ public sealed class ChannelService(
 public sealed class MessageService(
     IMessageRepository messageRepository,
     IChannelRepository channelRepository,
+    IDirectConversationRepository directConversationRepository,
     IServerRepository serverRepository,
     IUserRepository userRepository,
     IFileStorageService fileStorageService,
@@ -144,6 +145,14 @@ public sealed class MessageService(
         await permissionService.EnsurePermissionAsync(channel.ServerId, userId, PermissionType.ViewChannels, cancellationToken);
 
         var messages = await messageRepository.GetChannelMessagesAsync(channelId, page, Math.Clamp(pageSize, 1, 100), cancellationToken);
+        return messages.OrderBy(message => message.CreatedAt).Select(message => message.ToMessageDto()).ToArray();
+    }
+
+    public async Task<IReadOnlyCollection<MessageDto>> GetDirectConversationMessagesAsync(Guid conversationId, string userId, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var conversation = await RequireDirectConversationAsync(conversationId, userId, cancellationToken);
+
+        var messages = await messageRepository.GetDirectConversationMessagesAsync(conversation.Id, page, Math.Clamp(pageSize, 1, 100), cancellationToken);
         return messages.OrderBy(message => message.CreatedAt).Select(message => message.ToMessageDto()).ToArray();
     }
 
@@ -224,14 +233,98 @@ public sealed class MessageService(
         return dto;
     }
 
+    public async Task<MessageDto> CreateDirectAsync(Guid conversationId, string userId, string? content, Guid? replyToMessageId, IList<IFormFile>? files, CancellationToken cancellationToken = default)
+    {
+        var conversation = await RequireDirectConversationAsync(conversationId, userId, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(content) && (files is null || files.Count == 0))
+        {
+            throw new ApiException("A message must include text content or at least one attachment.");
+        }
+
+        Message? replyToMessage = null;
+        if (replyToMessageId.HasValue)
+        {
+            replyToMessage = await messageRepository.GetByIdAsync(replyToMessageId.Value, cancellationToken)
+                ?? throw new ApiException("Reply target was not found.", StatusCodes.Status404NotFound);
+
+            if (replyToMessage.DirectConversationId != conversationId)
+            {
+                throw new ApiException("Replies must target a message in the same direct conversation.");
+            }
+        }
+
+        var sender = await userRepository.GetByIdAsync(userId, cancellationToken)
+            ?? throw new ApiException("User was not found.", StatusCodes.Status404NotFound);
+
+        var message = new Message
+        {
+            Id = Guid.NewGuid(),
+            DirectConversationId = conversationId,
+            SenderId = userId,
+            Sender = sender,
+            Content = string.IsNullOrWhiteSpace(content) ? null : content.Trim(),
+            ReplyToMessageId = replyToMessageId,
+            ReplyToMessage = replyToMessage
+        };
+
+        if (files is not null && files.Count > 0)
+        {
+            var storedFiles = await fileStorageService.SaveMessageFilesAsync(files, cancellationToken);
+            foreach (var file in storedFiles)
+            {
+                message.Attachments.Add(new MessageAttachment
+                {
+                    Id = Guid.NewGuid(),
+                    MessageId = message.Id,
+                    FileName = file.FileName,
+                    StoredFileName = file.StoredFileName,
+                    ContentType = file.ContentType,
+                    Url = file.Url,
+                    SizeInBytes = file.SizeInBytes,
+                    IsImage = file.IsImage
+                });
+            }
+        }
+
+        conversation.LastActivityAt = DateTimeOffset.UtcNow;
+
+        await messageRepository.AddMessageAsync(message, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var dto = message.ToMessageDto();
+        await realtimeNotifier.NotifyDirectConversationAsync(conversationId, "messageCreated", dto, cancellationToken);
+
+        var recipientId = conversation.GetOtherUserId(userId);
+        await notificationService.NotifyAsync(
+            recipientId,
+            NotificationType.Message,
+            $"New direct message from {sender.DisplayName}",
+            TrimForNotification(message.Content),
+            nameof(DirectConversation),
+            conversationId.ToString(),
+            cancellationToken);
+
+        return dto;
+    }
+
     public async Task<MessageDto> UpdateAsync(Guid messageId, string userId, UpdateMessageRequest request, CancellationToken cancellationToken = default)
     {
         var message = await messageRepository.GetByIdAsync(messageId, cancellationToken)
             ?? throw new ApiException("Message was not found.", StatusCodes.Status404NotFound);
 
-        if (message.SenderId != userId)
+        if (message.DirectConversationId.HasValue)
         {
-            await permissionService.EnsurePermissionAsync(message.Channel.ServerId, userId, PermissionType.ManageMessages, cancellationToken);
+            await EnsureDirectMessageParticipantAsync(message, userId, cancellationToken);
+
+            if (message.SenderId != userId)
+            {
+                throw new ApiException("You can only edit your own direct messages.", StatusCodes.Status403Forbidden);
+            }
+        }
+        else if (message.SenderId != userId)
+        {
+            await permissionService.EnsurePermissionAsync(message.Channel!.ServerId, userId, PermissionType.ManageMessages, cancellationToken);
         }
 
         if (message.IsDeleted)
@@ -245,7 +338,7 @@ public sealed class MessageService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var dto = message.ToMessageDto();
-        await realtimeNotifier.NotifyChannelAsync(message.ChannelId, "messageUpdated", dto, cancellationToken);
+        await NotifyMessageScopeAsync(message, "messageUpdated", dto, cancellationToken);
         return dto;
     }
 
@@ -254,9 +347,18 @@ public sealed class MessageService(
         var message = await messageRepository.GetByIdAsync(messageId, cancellationToken)
             ?? throw new ApiException("Message was not found.", StatusCodes.Status404NotFound);
 
-        if (message.SenderId != userId)
+        if (message.DirectConversationId.HasValue)
         {
-            await permissionService.EnsurePermissionAsync(message.Channel.ServerId, userId, PermissionType.ManageMessages, cancellationToken);
+            await EnsureDirectMessageParticipantAsync(message, userId, cancellationToken);
+
+            if (message.SenderId != userId)
+            {
+                throw new ApiException("You can only delete your own direct messages.", StatusCodes.Status403Forbidden);
+            }
+        }
+        else if (message.SenderId != userId)
+        {
+            await permissionService.EnsurePermissionAsync(message.Channel!.ServerId, userId, PermissionType.ManageMessages, cancellationToken);
         }
 
         message.Content = null;
@@ -264,7 +366,7 @@ public sealed class MessageService(
         message.DeletedAt = DateTimeOffset.UtcNow;
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await realtimeNotifier.NotifyChannelAsync(message.ChannelId, "messageDeleted", new { messageId }, cancellationToken);
+        await NotifyMessageScopeAsync(message, "messageDeleted", new { messageId }, cancellationToken);
     }
 
     public async Task<MessageDto> TogglePinAsync(Guid messageId, string userId, CancellationToken cancellationToken = default)
@@ -272,19 +374,26 @@ public sealed class MessageService(
         var message = await messageRepository.GetByIdAsync(messageId, cancellationToken)
             ?? throw new ApiException("Message was not found.", StatusCodes.Status404NotFound);
 
-        var hasPinPermission = await permissionService.HasPermissionAsync(message.Channel.ServerId, userId, PermissionType.PinMessages, cancellationToken)
-            || await permissionService.HasPermissionAsync(message.Channel.ServerId, userId, PermissionType.ManageMessages, cancellationToken);
-
-        if (!hasPinPermission)
+        if (message.DirectConversationId.HasValue)
         {
-            throw new ApiException("You do not have permission to pin messages.", StatusCodes.Status403Forbidden);
+            await EnsureDirectMessageParticipantAsync(message, userId, cancellationToken);
+        }
+        else
+        {
+            var hasPinPermission = await permissionService.HasPermissionAsync(message.Channel!.ServerId, userId, PermissionType.PinMessages, cancellationToken)
+                || await permissionService.HasPermissionAsync(message.Channel.ServerId, userId, PermissionType.ManageMessages, cancellationToken);
+
+            if (!hasPinPermission)
+            {
+                throw new ApiException("You do not have permission to pin messages.", StatusCodes.Status403Forbidden);
+            }
         }
 
         message.IsPinned = !message.IsPinned;
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var dto = message.ToMessageDto();
-        await realtimeNotifier.NotifyChannelAsync(message.ChannelId, "messagePinnedChanged", dto, cancellationToken);
+        await NotifyMessageScopeAsync(message, "messagePinnedChanged", dto, cancellationToken);
         return dto;
     }
 
@@ -293,7 +402,7 @@ public sealed class MessageService(
         var message = await messageRepository.GetByIdAsync(messageId, cancellationToken)
             ?? throw new ApiException("Message was not found.", StatusCodes.Status404NotFound);
 
-        await permissionService.EnsurePermissionAsync(message.Channel.ServerId, userId, PermissionType.ViewChannels, cancellationToken);
+        await EnsureMessageVisibleAsync(message, userId, cancellationToken);
 
         var reaction = await messageRepository.GetReactionAsync(messageId, userId, request.Emoji.Trim(), cancellationToken);
         if (reaction is null)
@@ -312,7 +421,7 @@ public sealed class MessageService(
         }
 
         var dto = message.ToMessageDto();
-        await realtimeNotifier.NotifyChannelAsync(message.ChannelId, "messageReactionChanged", dto, cancellationToken);
+        await NotifyMessageScopeAsync(message, "messageReactionChanged", dto, cancellationToken);
         return dto;
     }
 
@@ -321,7 +430,7 @@ public sealed class MessageService(
         var message = await messageRepository.GetByIdAsync(messageId, cancellationToken)
             ?? throw new ApiException("Message was not found.", StatusCodes.Status404NotFound);
 
-        await permissionService.EnsurePermissionAsync(message.Channel.ServerId, userId, PermissionType.ViewChannels, cancellationToken);
+        await EnsureMessageVisibleAsync(message, userId, cancellationToken);
 
         var reaction = await messageRepository.GetReactionAsync(messageId, userId, emoji.Trim(), cancellationToken)
             ?? throw new ApiException("Reaction was not found.", StatusCodes.Status404NotFound);
@@ -333,7 +442,7 @@ public sealed class MessageService(
             ?? throw new ApiException("Message was not found.", StatusCodes.Status404NotFound);
 
         var dto = message.ToMessageDto();
-        await realtimeNotifier.NotifyChannelAsync(message.ChannelId, "messageReactionChanged", dto, cancellationToken);
+        await NotifyMessageScopeAsync(message, "messageReactionChanged", dto, cancellationToken);
         return dto;
     }
 
@@ -348,6 +457,51 @@ public sealed class MessageService(
         }
 
         return channel;
+    }
+
+    private async Task<DirectConversation> RequireDirectConversationAsync(Guid conversationId, string userId, CancellationToken cancellationToken)
+    {
+        var conversation = await directConversationRepository.GetByIdAsync(conversationId, cancellationToken)
+            ?? throw new ApiException("Direct conversation was not found.", StatusCodes.Status404NotFound);
+
+        if (!conversation.HasParticipant(userId))
+        {
+            throw new ApiException("You do not have access to this direct conversation.", StatusCodes.Status403Forbidden);
+        }
+
+        return conversation;
+    }
+
+    private async Task EnsureMessageVisibleAsync(Message message, string userId, CancellationToken cancellationToken)
+    {
+        if (message.DirectConversationId.HasValue)
+        {
+            await EnsureDirectMessageParticipantAsync(message, userId, cancellationToken);
+            return;
+        }
+
+        await permissionService.EnsurePermissionAsync(message.Channel!.ServerId, userId, PermissionType.ViewChannels, cancellationToken);
+    }
+
+    private Task EnsureDirectMessageParticipantAsync(Message message, string userId, CancellationToken cancellationToken)
+    {
+        if (message.DirectConversation is null || !message.DirectConversation.HasParticipant(userId))
+        {
+            throw new ApiException("You do not have access to this direct conversation.", StatusCodes.Status403Forbidden);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task NotifyMessageScopeAsync(Message message, string eventName, object payload, CancellationToken cancellationToken)
+    {
+        if (message.DirectConversationId.HasValue)
+        {
+            await realtimeNotifier.NotifyDirectConversationAsync(message.DirectConversationId.Value, eventName, payload, cancellationToken);
+            return;
+        }
+
+        await realtimeNotifier.NotifyChannelAsync(message.ChannelId!.Value, eventName, payload, cancellationToken);
     }
 
     private static string TrimForNotification(string? content)

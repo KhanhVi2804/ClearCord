@@ -5,6 +5,7 @@ using ClearCord.DTOs;
 using ClearCord.Entities;
 using ClearCord.Enums;
 using ClearCord.Repositories;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 
 namespace ClearCord.Services;
@@ -50,6 +51,7 @@ public sealed class ServerService(
     IServerPermissionService permissionService,
     INotificationService notificationService,
     IUnitOfWork unitOfWork,
+    IFileStorageService fileStorageService,
     IOptions<JwtSettings> jwtOptions) : IServerService
 {
     private static readonly PermissionType[] MemberPermissions =
@@ -197,6 +199,21 @@ public sealed class ServerService(
 
         server.Name = request.Name.Trim();
         server.Description = request.Description?.Trim();
+        server.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return server.ToServerSummaryDto();
+    }
+
+    public async Task<ServerSummaryDto> UploadIconAsync(Guid serverId, string userId, IFormFile icon, CancellationToken cancellationToken = default)
+    {
+        await permissionService.EnsurePermissionAsync(serverId, userId, PermissionType.ManageServer, cancellationToken);
+
+        var server = await serverRepository.GetByIdAsync(serverId, cancellationToken)
+            ?? throw new ApiException("Server was not found.", StatusCodes.Status404NotFound);
+
+        var storedFile = await fileStorageService.SaveAvatarAsync(icon, cancellationToken);
+        server.IconUrl = storedFile.Url;
         server.UpdatedAt = DateTimeOffset.UtcNow;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

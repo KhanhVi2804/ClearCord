@@ -13,7 +13,10 @@ namespace ClearCord.Hubs;
 public sealed class ChatHub(
     IConnectionService connectionService,
     IVoiceService voiceService,
+    IDirectVoiceService directVoiceService,
     IMessageService messageService,
+    IDirectConversationService directConversationService,
+    IDirectConversationRepository directConversationRepository,
     IChannelRepository channelRepository,
     IServerPermissionService permissionService) : Hub
 {
@@ -27,6 +30,7 @@ public sealed class ChatHub(
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         await voiceService.LeaveByConnectionAsync(Context.ConnectionId);
+        await directVoiceService.LeaveByConnectionAsync(Context.ConnectionId);
         await connectionService.DisconnectAsync(Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
@@ -53,6 +57,18 @@ public sealed class ChatHub(
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, RealtimeGroups.Channel(channelId));
     }
 
+    public async Task JoinDirectConversation(Guid conversationId)
+    {
+        var userId = GetUserId();
+        await directConversationService.EnsureParticipantAsync(conversationId, userId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.DirectConversation(conversationId));
+    }
+
+    public async Task LeaveDirectConversation(Guid conversationId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, RealtimeGroups.DirectConversation(conversationId));
+    }
+
     public async Task SendTyping(Guid channelId, bool isTyping)
     {
         var userId = GetUserId();
@@ -68,10 +84,28 @@ public sealed class ChatHub(
         });
     }
 
+    public async Task SendDirectTyping(Guid conversationId, bool isTyping)
+    {
+        var userId = GetUserId();
+        await directConversationService.EnsureParticipantAsync(conversationId, userId);
+        await Clients.OthersInGroup(RealtimeGroups.DirectConversation(conversationId)).SendAsync("typingChanged", new
+        {
+            directConversationId = conversationId,
+            userId,
+            isTyping
+        });
+    }
+
     public async Task<MessageDto> SendMessage(SendRealtimeMessageRequest request)
     {
         var userId = GetUserId();
         return await messageService.CreateAsync(request.ChannelId, userId, request.Content, request.ReplyToMessageId, null);
+    }
+
+    public async Task<MessageDto> SendDirectMessage(SendRealtimeDirectMessageRequest request)
+    {
+        var userId = GetUserId();
+        return await messageService.CreateDirectAsync(request.DirectConversationId, userId, request.Content, request.ReplyToMessageId, null);
     }
 
     public async Task<IReadOnlyCollection<VoiceParticipantDto>> JoinVoiceChannel(Guid channelId, bool isMuted, bool isCameraEnabled, bool isScreenSharing)
@@ -94,6 +128,27 @@ public sealed class ChatHub(
         return await voiceService.UpdateStateAsync(channelId, userId, new UpdateVoiceStateRequest(Context.ConnectionId, isMuted, isCameraEnabled, isScreenSharing));
     }
 
+    public async Task<IReadOnlyCollection<VoiceParticipantDto>> JoinDirectVoice(Guid conversationId, bool isMuted, bool isCameraEnabled, bool isScreenSharing)
+    {
+        var userId = GetUserId();
+        await directConversationService.EnsureParticipantAsync(conversationId, userId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.DirectConversation(conversationId));
+
+        return await directVoiceService.JoinAsync(conversationId, userId, new JoinVoiceChannelRequest(Context.ConnectionId, isMuted, isCameraEnabled, isScreenSharing));
+    }
+
+    public async Task<IReadOnlyCollection<VoiceParticipantDto>> LeaveDirectVoice(Guid conversationId)
+    {
+        var userId = GetUserId();
+        return await directVoiceService.LeaveAsync(conversationId, userId, Context.ConnectionId);
+    }
+
+    public async Task<IReadOnlyCollection<VoiceParticipantDto>> UpdateDirectVoiceState(Guid conversationId, bool isMuted, bool isCameraEnabled, bool isScreenSharing)
+    {
+        var userId = GetUserId();
+        return await directVoiceService.UpdateStateAsync(conversationId, userId, new UpdateVoiceStateRequest(Context.ConnectionId, isMuted, isCameraEnabled, isScreenSharing));
+    }
+
     public async Task SendWebRtcSignal(WebRtcSignalRequest request)
     {
         var userId = GetUserId();
@@ -106,6 +161,27 @@ public sealed class ChatHub(
         await Clients.User(request.TargetUserId).SendAsync("webrtcSignal", new
         {
             request.ChannelId,
+            SourceUserId = userId,
+            request.TargetUserId,
+            Type = request.Type.ToString(),
+            request.Payload
+        });
+    }
+
+    public async Task SendDirectWebRtcSignal(DirectWebRtcSignalRequest request)
+    {
+        var userId = GetUserId();
+        var conversation = await directConversationRepository.GetByIdAsync(request.DirectConversationId)
+            ?? throw new HubException("Direct conversation was not found.");
+
+        if (!conversation.HasParticipant(userId) || !conversation.HasParticipant(request.TargetUserId))
+        {
+            throw new HubException("You do not have access to this direct conversation.");
+        }
+
+        await Clients.User(request.TargetUserId).SendAsync("webrtcSignal", new
+        {
+            request.DirectConversationId,
             SourceUserId = userId,
             request.TargetUserId,
             Type = request.Type.ToString(),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toAssetUrl, voiceApi } from "../services/api";
+import { directApi, toAssetUrl, voiceApi } from "../services/api";
 import { chatSignalR } from "../services/signalr";
 import { useI18n } from "../i18n";
 
@@ -70,12 +70,14 @@ function VoicePanel({
   const peerConnectionsRef = useRef(new Map());
   const screenStreamRef = useRef(null);
   const channelIdRef = useRef(currentChannel?.id ?? null);
+  const isDirectRef = useRef(Boolean(currentChannel?.isDirect));
   const previousChannelIdRef = useRef(currentChannel?.id ?? null);
   const isJoinedRef = useRef(false);
 
   useEffect(() => {
     channelIdRef.current = currentChannel?.id ?? null;
-  }, [currentChannel?.id]);
+    isDirectRef.current = Boolean(currentChannel?.isDirect);
+  }, [currentChannel?.id, currentChannel?.isDirect]);
 
   useEffect(() => {
     isJoinedRef.current = isJoined;
@@ -101,7 +103,9 @@ function VoicePanel({
 
     async function loadParticipants() {
       try {
-        const nextParticipants = await voiceApi.getParticipants(currentChannel.id);
+        const nextParticipants = currentChannel.isDirect
+          ? await directApi.getVoiceParticipants(currentChannel.id)
+          : await voiceApi.getParticipants(currentChannel.id);
         if (isMounted) {
           setParticipants(nextParticipants);
         }
@@ -121,11 +125,21 @@ function VoicePanel({
 
   useEffect(() => {
     const unsubscribeParticipants = chatSignalR.onVoiceParticipantsUpdated((payload) => {
-      setParticipants(payload);
+      const matchesTarget = isDirectRef.current
+        ? payload.directConversationId === channelIdRef.current
+        : payload.channelId === channelIdRef.current;
+
+      if (matchesTarget || (!payload.channelId && !payload.directConversationId)) {
+        setParticipants(payload.participants ?? payload);
+      }
     });
 
     const unsubscribeSignals = chatSignalR.onWebRtcSignal((signal) => {
-      if (signal.channelId !== channelIdRef.current) {
+      const matchesTarget = isDirectRef.current
+        ? signal.directConversationId === channelIdRef.current
+        : signal.channelId === channelIdRef.current;
+
+      if (!matchesTarget) {
         return;
       }
 
@@ -269,6 +283,39 @@ function VoicePanel({
     });
   }
 
+  async function sendWebRtcSignal(targetUserId, type, payload) {
+    if (!channelIdRef.current) {
+      return;
+    }
+
+    if (isDirectRef.current) {
+      await chatSignalR.sendDirectWebRtcSignal({
+        directConversationId: channelIdRef.current,
+        targetUserId,
+        type,
+        payload
+      });
+      return;
+    }
+
+    await chatSignalR.sendWebRtcSignal({
+      channelId: channelIdRef.current,
+      targetUserId,
+      type,
+      payload
+    });
+  }
+
+  async function updateCurrentVoiceState(nextState) {
+    if (!currentChannel) {
+      return [];
+    }
+
+    return currentChannel.isDirect
+      ? chatSignalR.updateDirectVoiceState(currentChannel.id, nextState)
+      : chatSignalR.updateVoiceState(currentChannel.id, nextState);
+  }
+
   function ensurePeerConnection(targetUserId) {
     if (peerConnectionsRef.current.has(targetUserId)) {
       return peerConnectionsRef.current.get(targetUserId);
@@ -285,12 +332,7 @@ function VoicePanel({
         return;
       }
 
-      chatSignalR.sendWebRtcSignal({
-        channelId: channelIdRef.current,
-        targetUserId,
-        type: "IceCandidate",
-        payload: JSON.stringify(event.candidate)
-      });
+      sendWebRtcSignal(targetUserId, "IceCandidate", JSON.stringify(event.candidate));
     };
 
     connection.ontrack = (event) => {
@@ -322,12 +364,7 @@ function VoicePanel({
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
 
-    await chatSignalR.sendWebRtcSignal({
-      channelId: channelIdRef.current,
-      targetUserId,
-      type: "Offer",
-      payload: JSON.stringify(offer)
-    });
+    await sendWebRtcSignal(targetUserId, "Offer", JSON.stringify(offer));
   }
 
   function shouldCreateOffer(remoteUserId) {
@@ -368,12 +405,7 @@ function VoicePanel({
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
 
-        await chatSignalR.sendWebRtcSignal({
-          channelId: channelIdRef.current,
-          targetUserId: signal.sourceUserId,
-          type: "Answer",
-          payload: JSON.stringify(answer)
-        });
+        await sendWebRtcSignal(signal.sourceUserId, "Answer", JSON.stringify(answer));
 
         return;
       }
@@ -415,11 +447,14 @@ function VoicePanel({
         isScreenSharing
       });
 
-      const nextParticipants = await chatSignalR.joinVoiceChannel(currentChannel.id, {
+      const voiceState = {
         isMuted,
         isCameraEnabled,
         isScreenSharing
-      });
+      };
+      const nextParticipants = currentChannel.isDirect
+        ? await chatSignalR.joinDirectVoice(currentChannel.id, voiceState)
+        : await chatSignalR.joinVoiceChannel(currentChannel.id, voiceState);
 
       setParticipants(nextParticipants);
       setIsJoined(true);
@@ -435,15 +470,14 @@ function VoicePanel({
     try {
       if (channelIdRef.current && isJoinedRef.current) {
         for (const userId of peerConnectionsRef.current.keys()) {
-          await chatSignalR.sendWebRtcSignal({
-            channelId: channelIdRef.current,
-            targetUserId: userId,
-            type: "Hangup",
-            payload: "{}"
-          });
+          await sendWebRtcSignal(userId, "Hangup", "{}");
         }
 
-        await chatSignalR.leaveVoiceChannel(channelIdRef.current);
+        if (isDirectRef.current) {
+          await chatSignalR.leaveDirectVoice(channelIdRef.current);
+        } else {
+          await chatSignalR.leaveVoiceChannel(channelIdRef.current);
+        }
       }
     } catch (requestError) {
       console.warn("Failed to leave voice channel cleanly.", requestError);
@@ -463,7 +497,7 @@ function VoicePanel({
     });
 
     if (isJoined) {
-      await chatSignalR.updateVoiceState(currentChannel.id, {
+      await updateCurrentVoiceState({
         isMuted: nextMuted,
         isCameraEnabled,
         isScreenSharing
@@ -484,7 +518,7 @@ function VoicePanel({
       });
 
       if (isJoined) {
-        await chatSignalR.updateVoiceState(currentChannel.id, {
+        await updateCurrentVoiceState({
           isMuted,
           isCameraEnabled: nextCameraEnabled,
           isScreenSharing
@@ -510,7 +544,7 @@ function VoicePanel({
       });
 
       if (isJoined) {
-        await chatSignalR.updateVoiceState(currentChannel.id, {
+        await updateCurrentVoiceState({
           isMuted,
           isCameraEnabled,
           isScreenSharing: nextScreenSharing

@@ -3,7 +3,8 @@ namespace ClearCord.Entities;
 public sealed class Message
 {
     public Guid Id { get; set; }
-    public Guid ChannelId { get; set; }
+    public Guid? ChannelId { get; set; }
+    public Guid? DirectConversationId { get; set; }
     public string SenderId { get; set; } = string.Empty;
     public Guid? ReplyToMessageId { get; set; }
     public string? Content { get; set; }
@@ -14,7 +15,8 @@ public sealed class Message
     public DateTimeOffset? UpdatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
 
-    public Channel Channel { get; set; } = null!;
+    public Channel? Channel { get; set; }
+    public DirectConversation? DirectConversation { get; set; }
     public ApplicationUser Sender { get; set; } = null!;
     public Message? ReplyToMessage { get; set; }
     public ICollection<Message> Replies { get; set; } = new List<Message>();

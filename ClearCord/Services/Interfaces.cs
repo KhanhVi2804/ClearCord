@@ -36,6 +36,13 @@ public interface IFriendService
     Task UnfriendAsync(string currentUserId, string friendUserId, CancellationToken cancellationToken = default);
 }
 
+public interface IDirectConversationService
+{
+    Task<IReadOnlyCollection<DirectConversationDto>> GetForUserAsync(string userId, CancellationToken cancellationToken = default);
+    Task<DirectConversationDto> GetOrCreateAsync(string userId, StartDirectConversationRequest request, CancellationToken cancellationToken = default);
+    Task EnsureParticipantAsync(Guid conversationId, string userId, CancellationToken cancellationToken = default);
+}
+
 public interface IServerPermissionService
 {
     Task<bool> HasPermissionAsync(Guid serverId, string userId, PermissionType permission, CancellationToken cancellationToken = default);
@@ -48,6 +55,7 @@ public interface IServerService
     Task<IReadOnlyCollection<ServerSummaryDto>> GetForUserAsync(string userId, CancellationToken cancellationToken = default);
     Task<ServerDetailsDto> GetDetailsAsync(Guid serverId, string userId, CancellationToken cancellationToken = default);
     Task<ServerSummaryDto> UpdateAsync(Guid serverId, string userId, UpdateServerRequest request, CancellationToken cancellationToken = default);
+    Task<ServerSummaryDto> UploadIconAsync(Guid serverId, string userId, IFormFile icon, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid serverId, string userId, CancellationToken cancellationToken = default);
     Task<ServerSummaryDto> JoinAsync(string userId, JoinServerRequest request, CancellationToken cancellationToken = default);
     Task LeaveAsync(Guid serverId, string userId, CancellationToken cancellationToken = default);
@@ -72,7 +80,9 @@ public interface IChannelService
 public interface IMessageService
 {
     Task<IReadOnlyCollection<MessageDto>> GetChannelMessagesAsync(Guid channelId, string userId, int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<MessageDto>> GetDirectConversationMessagesAsync(Guid conversationId, string userId, int page, int pageSize, CancellationToken cancellationToken = default);
     Task<MessageDto> CreateAsync(Guid channelId, string userId, string? content, Guid? replyToMessageId, IList<IFormFile>? files, CancellationToken cancellationToken = default);
+    Task<MessageDto> CreateDirectAsync(Guid conversationId, string userId, string? content, Guid? replyToMessageId, IList<IFormFile>? files, CancellationToken cancellationToken = default);
     Task<MessageDto> UpdateAsync(Guid messageId, string userId, UpdateMessageRequest request, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid messageId, string userId, CancellationToken cancellationToken = default);
     Task<MessageDto> TogglePinAsync(Guid messageId, string userId, CancellationToken cancellationToken = default);
@@ -95,6 +105,15 @@ public interface IVoiceService
     Task<IReadOnlyCollection<VoiceParticipantDto>> LeaveAsync(Guid channelId, string userId, string connectionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<VoiceParticipantDto>> LeaveByConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<VoiceParticipantDto>> UpdateStateAsync(Guid channelId, string userId, UpdateVoiceStateRequest request, CancellationToken cancellationToken = default);
+}
+
+public interface IDirectVoiceService
+{
+    Task<IReadOnlyCollection<VoiceParticipantDto>> GetParticipantsAsync(Guid conversationId, string userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<VoiceParticipantDto>> JoinAsync(Guid conversationId, string userId, JoinVoiceChannelRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<VoiceParticipantDto>> LeaveAsync(Guid conversationId, string userId, string connectionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<VoiceParticipantDto>> LeaveByConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<VoiceParticipantDto>> UpdateStateAsync(Guid conversationId, string userId, UpdateVoiceStateRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface IConnectionService
@@ -122,6 +141,7 @@ public interface IRealtimeNotifier
     Task NotifyUserAsync(string userId, string eventName, object payload, CancellationToken cancellationToken = default);
     Task NotifyUsersAsync(IEnumerable<string> userIds, string eventName, object payload, CancellationToken cancellationToken = default);
     Task NotifyChannelAsync(Guid channelId, string eventName, object payload, CancellationToken cancellationToken = default);
+    Task NotifyDirectConversationAsync(Guid conversationId, string eventName, object payload, CancellationToken cancellationToken = default);
     Task NotifyServerAsync(Guid serverId, string eventName, object payload, CancellationToken cancellationToken = default);
     Task NotifyPresenceChangedAsync(string userId, bool isOnline, DateTimeOffset? lastSeenAt, CancellationToken cancellationToken = default);
 }
