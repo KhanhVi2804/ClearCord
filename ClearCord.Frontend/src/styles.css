@@ -1088,10 +1088,38 @@ select:focus {
   justify-content: flex-end;
 }
 
-.image-attachment img {
-  width: min(260px, 100%);
+.image-attachment,
+.video-attachment {
+  max-width: min(360px, 72vw);
+}
+
+.image-attachment img,
+.video-attachment video {
+  display: block;
+  width: 100%;
   border-radius: 18px;
   border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.image-attachment img {
+  max-height: 420px;
+  object-fit: contain;
+}
+
+.video-attachment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.video-attachment video {
+  max-height: 420px;
+}
+
+.video-attachment span {
+  color: var(--text-muted);
+  font-size: 0.84rem;
 }
 
 .file-attachment {

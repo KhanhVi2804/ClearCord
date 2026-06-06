@@ -10,6 +10,29 @@ const QUICK_REACTIONS = [
   "\u{1F440}"
 ];
 
+const IMAGE_EXTENSIONS = [".avif", ".gif", ".jpeg", ".jpg", ".png", ".webp"];
+const VIDEO_EXTENSIONS = [".m4v", ".mov", ".mp4", ".ogg", ".ogv", ".webm"];
+
+function getFileExtension(fileName = "") {
+  const dotIndex = fileName.lastIndexOf(".");
+  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : "";
+}
+
+function getAttachmentKind(attachment) {
+  const contentType = attachment.contentType?.toLowerCase() ?? "";
+  const extension = getFileExtension(attachment.fileName);
+
+  if (attachment.isImage || contentType.startsWith("image/") || IMAGE_EXTENSIONS.includes(extension)) {
+    return "image";
+  }
+
+  if (contentType.startsWith("video/") || VIDEO_EXTENSIONS.includes(extension)) {
+    return "video";
+  }
+
+  return "file";
+}
+
 function groupReactions(reactions, currentUserId) {
   const grouped = new Map();
 
@@ -218,29 +241,41 @@ function MessageItem({
 
         {message.attachments?.length > 0 && (
           <div className="attachment-stack">
-            {message.attachments.map((attachment) =>
-              attachment.isImage ? (
+            {message.attachments.map((attachment) => {
+              const attachmentUrl = toAssetUrl(attachment.url);
+              const attachmentKind = getAttachmentKind(attachment);
+
+              if (attachmentKind === "image") {
+                return (
+                  <div key={attachment.id} className="image-attachment">
+                    <img src={attachmentUrl} alt={attachment.fileName} />
+                  </div>
+                );
+              }
+
+              if (attachmentKind === "video") {
+                return (
+                  <div key={attachment.id} className="video-attachment">
+                    <video controls preload="metadata" src={attachmentUrl}>
+                      <a href={attachmentUrl}>{attachment.fileName}</a>
+                    </video>
+                    <span>{attachment.fileName}</span>
+                  </div>
+                );
+              }
+
+              return (
                 <a
                   key={attachment.id}
-                  href={toAssetUrl(attachment.url)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="image-attachment"
-                >
-                  <img src={toAssetUrl(attachment.url)} alt={attachment.fileName} />
-                </a>
-              ) : (
-                <a
-                  key={attachment.id}
-                  href={toAssetUrl(attachment.url)}
+                  href={attachmentUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="file-attachment"
                 >
                   {attachment.fileName}
                 </a>
-              )
-            )}
+              );
+            })}
           </div>
         )}
 
