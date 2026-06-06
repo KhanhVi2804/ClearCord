@@ -1767,8 +1767,6 @@ select:focus {
   gap: 0.35rem;
 }
 
-.message-item:hover .message-controls,
-.message-item:focus-within .message-controls,
 .message-item.menu-open .message-controls {
   opacity: 1;
   pointer-events: auto;
