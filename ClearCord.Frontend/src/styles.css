@@ -964,14 +964,23 @@ select:focus {
   gap: 1rem;
 }
 
+.message-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.message-row.own {
+  justify-content: flex-end;
+}
+
 .message-item {
   display: flex;
   gap: 0.9rem;
   align-items: flex-start;
+  max-width: min(100%, 820px);
 }
 
 .message-item.own {
-  align-self: flex-end;
   flex-direction: row-reverse;
 }
 
@@ -991,6 +1000,7 @@ select:focus {
 
 .message-item.own .message-body {
   align-items: flex-end;
+  text-align: right;
 }
 
 .message-meta {
@@ -1060,6 +1070,12 @@ select:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 0.8rem;
+}
+
+.message-item.own .attachment-stack,
+.message-item.own .reaction-row,
+.message-item.own .message-actions {
+  justify-content: flex-end;
 }
 
 .image-attachment img {

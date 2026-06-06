@@ -174,16 +174,21 @@ function ChatBox({
           </div>
         ) : (
           messages.map((message) => {
-            const canEdit = !message.isDeleted && (message.sender?.id === currentUser.id || canManageMessages);
-            const canDelete = message.sender?.id === currentUser.id || canManageMessages;
+            const isOwnMessage = message.sender?.id === currentUser.id;
+            const canEdit = !message.isDeleted && (isOwnMessage || canManageMessages);
+            const canDelete = isOwnMessage || canManageMessages;
             const canPin = canPinMessages || canManageMessages;
 
             return (
-              <div key={message.id} data-message-id={message.id}>
+              <div
+                key={message.id}
+                data-message-id={message.id}
+                className={`message-row ${isOwnMessage ? "own" : ""}`}
+              >
                 <MessageItem
                   currentUserId={currentUser.id}
                   message={message}
-                  isOwnMessage={message.sender?.id === currentUser.id}
+                  isOwnMessage={isOwnMessage}
                   isEditing={editingMessageId === message.id}
                   canEdit={canEdit}
                   canDelete={canDelete}
