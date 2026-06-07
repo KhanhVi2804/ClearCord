@@ -82,7 +82,6 @@ function ChannelList({
     <aside className="channel-panel">
       <div className="channel-panel-header">
         <h2>{server?.name ?? t("channel.noServer")}</h2>
-        <span className="material-symbols-outlined">expand_more</span>
       </div>
 
       <div className="channel-scroll">
