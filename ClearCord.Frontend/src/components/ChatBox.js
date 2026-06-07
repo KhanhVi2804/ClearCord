@@ -123,15 +123,38 @@ function ChatBox({
   return (
     <section className="chat-panel">
       <header className="chat-header">
-        <div className="chat-header-main">
-          <span className="channel-hash">{isDirectConversation ? "@" : "#"}</span>
-          <h2>{currentChannel.name}</h2>
-          {currentChannel.topic ? (
-            <>
-              <span className="chat-header-divider" aria-hidden="true" />
-              <p className="chat-topic">{currentChannel.topic}</p>
-            </>
-          ) : null}
+        <div className="chat-header-row">
+          <div className="chat-header-main">
+            <span className="channel-hash material-symbols-outlined">
+              {isDirectConversation ? "alternate_email" : "tag"}
+            </span>
+            <h2>{currentChannel.name}</h2>
+            {currentChannel.topic ? (
+              <>
+                <span className="chat-header-divider" aria-hidden="true" />
+                <p className="chat-topic">{currentChannel.topic}</p>
+              </>
+            ) : null}
+          </div>
+
+          <div className="chat-header-actions" aria-label="Channel actions">
+            <button type="button" title="Notifications">
+              <span className="material-symbols-outlined">notifications</span>
+            </button>
+            <button type="button" title="Pinned messages">
+              <span className="material-symbols-outlined">push_pin</span>
+            </button>
+            <button type="button" title="Members">
+              <span className="material-symbols-outlined">group</span>
+            </button>
+            <label className="chat-search-mini">
+              <input type="search" placeholder={t("common.search")} />
+              <span className="material-symbols-outlined">search</span>
+            </label>
+            <button type="button" title="Help">
+              <span className="material-symbols-outlined">help</span>
+            </button>
+          </div>
         </div>
         {typingUsers.length > 0 && (
           <div className="typing-line">
@@ -256,7 +279,8 @@ function ChatBox({
 
         <div className="composer-actions">
           <label className="file-upload-button">
-            {t("chat.attach")}
+            <span className="material-symbols-outlined">add_circle</span>
+            <span>{t("chat.attach")}</span>
             <input
               type="file"
               multiple
@@ -265,6 +289,12 @@ function ChatBox({
               }}
             />
           </label>
+          <button type="button" className="composer-icon-button" title="GIF">
+            GIF
+          </button>
+          <button type="button" className="composer-icon-button" title="Emoji">
+            <span className="material-symbols-outlined">mood</span>
+          </button>
 
           <button
             type="submit"
