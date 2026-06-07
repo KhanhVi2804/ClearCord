@@ -120,6 +120,10 @@ function ChatBox({
     }, 1200);
   }
 
+  function handleFileSelection(event) {
+    setSelectedFiles(Array.from(event.target.files || []));
+  }
+
   return (
     <section className="chat-panel">
       <header className="chat-header">
@@ -278,17 +282,17 @@ function ChatBox({
         </div>
 
         <div className="composer-actions">
-          <label className="file-upload-button">
+          <div className="file-upload-control">
             <span className="material-symbols-outlined">add_circle</span>
             <span>{t("chat.attach")}</span>
             <input
               type="file"
               multiple
-              onChange={(event) => {
-                setSelectedFiles(Array.from(event.target.files || []));
-              }}
+              className="native-file-input"
+              title={t("chat.attach")}
+              onChange={handleFileSelection}
             />
-          </label>
+          </div>
           <button type="button" className="composer-icon-button" title="GIF">
             GIF
           </button>

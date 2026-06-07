@@ -1,5 +1,6 @@
 import { toAssetUrl } from "../services/api";
 import { useI18n } from "../i18n";
+import appLogoUrl from "../assets/app-logo.png";
 
 function ServerRail({
   servers,
@@ -22,7 +23,9 @@ function ServerRail({
         onClick={() => onSelectView("chat")}
         title={t("tabs.chat")}
       >
-        <span className="brand-mark">CC</span>
+        <span className="brand-mark">
+          <img src={appLogoUrl} alt="ClearCord" className="app-logo-mark" />
+        </span>
       </button>
 
       <div className="server-stack">
