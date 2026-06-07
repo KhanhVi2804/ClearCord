@@ -10,6 +10,8 @@ function SecondaryPanel({
   connectionState,
   onSelectChannel,
   friends,
+  directConversations,
+  selectedDirectConversationId,
   friendRequests,
   searchTerm,
   searchResults,
@@ -20,6 +22,7 @@ function SecondaryPanel({
   onAcceptFriendRequest,
   onRejectFriendRequest,
   onUnfriend,
+  onOpenDirectConversation,
   onStartDirectChat,
   onStartDirectCall,
   onViewProfile,
@@ -32,6 +35,8 @@ function SecondaryPanel({
     return (
       <FriendsPanel
         friends={friends}
+        directConversations={directConversations}
+        selectedDirectConversationId={selectedDirectConversationId}
         requests={friendRequests}
         searchTerm={searchTerm}
         searchResults={searchResults}
@@ -42,6 +47,7 @@ function SecondaryPanel({
         onAcceptRequest={onAcceptFriendRequest}
         onRejectRequest={onRejectFriendRequest}
         onUnfriend={onUnfriend}
+        onOpenDirectConversation={onOpenDirectConversation}
         onStartDirectChat={onStartDirectChat}
         onStartDirectCall={onStartDirectCall}
         onViewProfile={onViewProfile}

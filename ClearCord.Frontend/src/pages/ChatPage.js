@@ -16,6 +16,7 @@ import {
   messageApi,
   notificationApi,
   serverApi,
+  toAssetUrl,
   updateStoredUser,
   userApi
 } from "../services/api";
@@ -29,6 +30,174 @@ import {
   upsertMessage
 } from "./chatHelpers";
 import { useI18n } from "../i18n";
+
+function FriendsHomePanel({
+  friends,
+  friendRequests,
+  searchTerm,
+  onSearchTermChange,
+  onFocusSearch,
+  onStartDirectChat,
+  onStartDirectCall,
+  onAcceptRequest,
+  onRejectRequest,
+  onViewProfile
+}) {
+  const { t } = useI18n();
+  const [filter, setFilter] = useState("online");
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const visibleFriends = friends.filter((friend) => {
+    const matchesSearch =
+      !normalizedSearch ||
+      friend.displayName.toLowerCase().includes(normalizedSearch) ||
+      friend.userName.toLowerCase().includes(normalizedSearch);
+
+    if (!matchesSearch) {
+      return false;
+    }
+
+    return filter === "online" ? friend.isOnline : true;
+  });
+
+  const pendingCount = friendRequests.length;
+
+  return (
+    <section className="chat-panel friends-main-panel">
+      <header className="friends-topbar">
+        <div className="friends-topbar-title">
+          <span className="material-like">person</span>
+          <h2>{t("tabs.friends")}</h2>
+        </div>
+        <nav className="friends-filter-tabs">
+          <button type="button" className={filter === "online" ? "active" : ""} onClick={() => setFilter("online")}>
+            {t("common.online")}
+          </button>
+          <button type="button" className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>
+            {t("common.all")}
+          </button>
+          <button type="button" className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}>
+            {t("friends.pendingRequests")}
+            {pendingCount > 0 ? ` ${pendingCount}` : ""}
+          </button>
+          <button type="button" className="add-friend-tab" onClick={onFocusSearch}>
+            {t("friends.addFriend")}
+          </button>
+        </nav>
+      </header>
+
+      <div className="friends-main-body">
+        <section className="friends-list-body">
+          <label className="friends-search-bar">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => onSearchTermChange(event.target.value)}
+              placeholder={t("friends.searchPlaceholder")}
+            />
+            <span>search</span>
+          </label>
+
+          {filter === "pending" ? (
+            <div className="discord-list">
+              <p className="discord-section-label">{t("friends.pendingRequests")} - {friendRequests.length}</p>
+              {friendRequests.map((request) => (
+                <article key={request.id} className="discord-friend-row">
+                  <div className="discord-friend-main">
+                    <div className="avatar-badge">
+                      {request.user.avatarUrl ? (
+                        <img src={toAssetUrl(request.user.avatarUrl)} alt={request.user.displayName} className="avatar-image" />
+                      ) : (
+                        <span>{request.user.displayName?.[0]?.toUpperCase() || "U"}</span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{request.user.displayName}</strong>
+                      <p>@{request.user.userName}</p>
+                    </div>
+                  </div>
+                  <div className="discord-row-actions">
+                    <button type="button" onClick={() => onAcceptRequest(request.id)}>{t("friends.accept")}</button>
+                    <button type="button" onClick={() => onRejectRequest(request.id)}>{t("friends.reject")}</button>
+                  </div>
+                </article>
+              ))}
+              {!friendRequests.length && <p className="muted-copy">{t("friends.noRequests")}</p>}
+            </div>
+          ) : (
+            <div className="discord-list">
+              <p className="discord-section-label">
+                {filter === "online" ? t("common.online") : t("common.all")} - {visibleFriends.length}
+              </p>
+              {visibleFriends.map((friend) => (
+                <article key={friend.userId} className="discord-friend-row">
+                  <div className="discord-friend-main">
+                    <div className="relative-avatar">
+                      <div className="avatar-badge">
+                        {friend.avatarUrl ? (
+                          <img src={toAssetUrl(friend.avatarUrl)} alt={friend.displayName} className="avatar-image" />
+                        ) : (
+                          <span>{friend.displayName?.[0]?.toUpperCase() || friend.userName?.[0]?.toUpperCase() || "U"}</span>
+                        )}
+                      </div>
+                      <span className={`presence-dot ${friend.isOnline ? "online" : "offline"}`} />
+                    </div>
+                    <div>
+                      <strong>{friend.displayName}</strong>
+                      <p>@{friend.userName} - {friend.isOnline ? t("common.online") : t("common.offline")}</p>
+                    </div>
+                  </div>
+                  <div className="discord-row-actions">
+                    <button type="button" title={t("friends.message")} onClick={() => onStartDirectChat(friend.userId)}>
+                      chat
+                    </button>
+                    <button type="button" title={t("friends.call")} onClick={() => onStartDirectCall(friend.userId)}>
+                      call
+                    </button>
+                    <button type="button" title={t("friends.viewProfile")} onClick={() => onViewProfile(friend.userId)}>
+                      more
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {!visibleFriends.length && <p className="muted-copy">{t("friends.noFriends")}</p>}
+            </div>
+          )}
+        </section>
+
+        <aside className="active-now-panel">
+          <h3>{t("friends.activeNow")}</h3>
+          {friends.filter((friend) => friend.isOnline).slice(0, 2).map((friend) => (
+            <article key={friend.userId} className="active-card">
+              <div className="discord-friend-main">
+                <div className="avatar-badge small">
+                  {friend.avatarUrl ? (
+                    <img src={toAssetUrl(friend.avatarUrl)} alt={friend.displayName} className="avatar-image" />
+                  ) : (
+                    <span>{friend.displayName?.[0]?.toUpperCase() || "U"}</span>
+                  )}
+                </div>
+                <div>
+                  <strong>{friend.displayName}</strong>
+                  <p>{t("common.online")}</p>
+                </div>
+              </div>
+              <div className="active-card-inner">
+                <span>chat_bubble</span>
+                <p>{t("friends.readyToChat")}</p>
+              </div>
+            </article>
+          ))}
+          {friends.filter((friend) => friend.isOnline).length === 0 && (
+            <div className="active-empty">
+              <strong>{t("friends.quietNow")}</strong>
+              <p>{t("friends.quietNowBody")}</p>
+            </div>
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
 
 function ChatPage({
   currentUser,
@@ -117,6 +286,8 @@ function ChatPage({
         isDirect: true
       }
     : currentVoiceChannel;
+
+  const directPeer = selectedDirectConversation?.otherUser ?? null;
 
   const permissions = useMemo(
     () => computePermissions(selectedServer, currentUser.id),
@@ -705,6 +876,25 @@ function ChatPage({
     setActiveView(view);
   }
 
+  function handleFocusFriendSearch() {
+    setActiveView("friends");
+    window.setTimeout(() => {
+      document.querySelector("[data-friend-search]")?.focus();
+    }, 0);
+  }
+
+  function handleOpenDirectConversation(conversation) {
+    setSocialError("");
+    setMessageError("");
+    setSendError("");
+    setSelectedDirectConversation(conversation);
+    setDirectVoiceConversation(null);
+    setMessages([]);
+    setReplyToMessage(null);
+    setEditingMessageId(null);
+    setActiveView("friends");
+  }
+
   async function handleStartDirectChat(friendUserId) {
     setSocialError("");
     setMessageError("");
@@ -914,6 +1104,7 @@ function ChatPage({
   }
 
   const hasNoServers = !isServersLoading && servers.length === 0;
+  const shouldShowFriendsHome = activeView === "friends" && !currentDirectChannel;
 
   return (
     <>
@@ -948,6 +1139,8 @@ function ChatPage({
             connectionState={connectionState}
             onSelectChannel={handleSelectChannel}
             friends={friends}
+            directConversations={directConversations}
+            selectedDirectConversationId={selectedDirectConversation?.id ?? null}
             friendRequests={friendRequests}
             searchTerm={searchTerm}
             searchResults={searchResults}
@@ -966,6 +1159,7 @@ function ChatPage({
             onUnfriend={(friendUserId) =>
               handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))
             }
+            onOpenDirectConversation={handleOpenDirectConversation}
             onStartDirectChat={handleStartDirectChat}
             onStartDirectCall={handleStartDirectCall}
             onViewProfile={(userId) =>
@@ -985,7 +1179,20 @@ function ChatPage({
         </div>
 
         <div className="chat-stage">
-          {hasNoServers && !currentDirectChannel ? (
+          {shouldShowFriendsHome ? (
+            <FriendsHomePanel
+              friends={friends}
+              friendRequests={friendRequests}
+              searchTerm={searchTerm}
+              onSearchTermChange={setSearchTerm}
+              onFocusSearch={handleFocusFriendSearch}
+              onStartDirectChat={(friendUserId) => handleStartDirectChat(friendUserId).catch((error) => setSocialError(error.message))}
+              onStartDirectCall={(friendUserId) => handleStartDirectCall(friendUserId).catch((error) => setSocialError(error.message))}
+              onAcceptRequest={(requestId) => handleAcceptRequest(requestId).catch((error) => setSocialError(error.message))}
+              onRejectRequest={(requestId) => handleRejectRequest(requestId).catch((error) => setSocialError(error.message))}
+              onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+            />
+          ) : hasNoServers && !currentDirectChannel ? (
             <section className="chat-panel empty-state-shell">
               <div className="empty-state-card">
                 <p className="eyebrow">{t("workspace.freshWorkspace")}</p>
@@ -1054,10 +1261,48 @@ function ChatPage({
           )}
         </div>
 
-        <WorkspaceRail
-          server={selectedServer}
-          onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
-        />
+        {directPeer ? (
+          <aside className="workspace-rail direct-context-rail">
+            <div className="direct-profile-card">
+              <div className="direct-profile-avatar">
+                {directPeer.avatarUrl ? (
+                  <img src={toAssetUrl(directPeer.avatarUrl)} alt={directPeer.displayName} className="avatar-image" />
+                ) : (
+                  <span>{directPeer.displayName?.[0]?.toUpperCase() || directPeer.userName?.[0]?.toUpperCase() || "U"}</span>
+                )}
+              </div>
+              <h3>{directPeer.displayName}</h3>
+              <p>@{directPeer.userName}</p>
+              <button
+                type="button"
+                className="primary-button compact"
+                onClick={() => handleStartDirectCall(directPeer.id).catch((error) => setSocialError(error.message))}
+              >
+                {t("friends.call")}
+              </button>
+              <button
+                type="button"
+                className="ghost-button compact"
+                onClick={() => handleViewUserProfile(directPeer.id).catch((error) => setSocialError(error.message))}
+              >
+                {t("friends.viewProfile")}
+              </button>
+            </div>
+          </aside>
+        ) : activeView === "friends" ? (
+          <aside className="workspace-rail direct-context-rail">
+            <div className="direct-profile-card muted-card">
+              <p className="eyebrow">{t("friends.homeEyebrow")}</p>
+              <h3>{t("friends.homeTitle")}</h3>
+              <p>{t("friends.homeBody")}</p>
+            </div>
+          </aside>
+        ) : (
+          <WorkspaceRail
+            server={selectedServer}
+            onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+          />
+        )}
       </main>
 
       {isCreateServerVisible && (
