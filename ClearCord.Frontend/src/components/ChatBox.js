@@ -142,8 +142,14 @@ function ChatBox({
           </div>
 
           <div className="chat-header-actions" aria-label="Channel actions">
+            <button type="button" title="Notifications">
+              <span className="material-symbols-outlined">notifications</span>
+            </button>
             <button type="button" title="Pinned messages">
               <span className="material-symbols-outlined">push_pin</span>
+            </button>
+            <button type="button" title="Members">
+              <span className="material-symbols-outlined">group</span>
             </button>
             <label className="chat-search-mini">
               <input type="search" placeholder={t("common.search")} />
