@@ -271,6 +271,9 @@ export const serverApi = {
       userId
     });
   },
+  async removeRole(serverId, roleId, userId) {
+    await api.delete(`/api/servers/${serverId}/roles/${roleId}/assignments/${userId}`);
+  },
   async kickMember(serverId, userId, reason) {
     await api.post(`/api/servers/${serverId}/members/${userId}/kick`, {
       reason: reason || null

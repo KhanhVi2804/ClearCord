@@ -124,21 +124,29 @@ public sealed class ServerService(
         server.Roles.Add(moderatorRole);
         server.Roles.Add(adminRole);
 
-        var lobbyCategory = new ChannelCategory
+        var textCategory = new ChannelCategory
         {
             Id = Guid.NewGuid(),
             ServerId = serverId,
-            Name = "Lobby",
+            Name = "Kênh chữ",
             Position = 1
+        };
+
+        var voiceCategory = new ChannelCategory
+        {
+            Id = Guid.NewGuid(),
+            ServerId = serverId,
+            Name = "Kênh voice",
+            Position = 2
         };
 
         var generalText = new Channel
         {
             Id = Guid.NewGuid(),
             ServerId = serverId,
-            CategoryId = lobbyCategory.Id,
-            Name = "general",
-            Topic = "General discussion",
+            CategoryId = textCategory.Id,
+            Name = "chat",
+            Topic = "Kênh chat",
             Type = ChannelType.Text,
             Position = 1
         };
@@ -147,15 +155,16 @@ public sealed class ServerService(
         {
             Id = Guid.NewGuid(),
             ServerId = serverId,
-            CategoryId = lobbyCategory.Id,
-            Name = "voice-lounge",
-            Topic = "Open voice hangout",
+            CategoryId = voiceCategory.Id,
+            Name = "voice",
+            Topic = "Kênh thoại",
             Type = ChannelType.Voice,
             Position = 2
         };
 
+        server.Categories.Add(textCategory);
+        server.Categories.Add(voiceCategory);
         await serverRepository.AddAsync(server, cancellationToken);
-        await channelRepository.AddCategoryAsync(lobbyCategory, cancellationToken);
         await channelRepository.AddChannelAsync(generalText, cancellationToken);
         await channelRepository.AddChannelAsync(generalVoice, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -379,6 +388,32 @@ public sealed class ServerService(
                 UserId = request.UserId
             }, cancellationToken);
 
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public async Task RemoveRoleAsync(Guid serverId, Guid roleId, string targetUserId, string actingUserId, CancellationToken cancellationToken = default)
+    {
+        await permissionService.EnsurePermissionAsync(serverId, actingUserId, PermissionType.ManageRoles, cancellationToken);
+
+        var server = await RequireServerAccessAsync(serverId, actingUserId, cancellationToken);
+        var role = server.Roles.FirstOrDefault(existingRole => existingRole.Id == roleId)
+            ?? throw new ApiException("Role was not found.", StatusCodes.Status404NotFound);
+
+        if (role.IsDefault || role.IsSystemRole)
+        {
+            throw new ApiException("Default or system roles cannot be removed from a member.", StatusCodes.Status403Forbidden);
+        }
+
+        if (server.Members.All(member => member.UserId != targetUserId))
+        {
+            throw new ApiException("Target user is not a member of this server.", StatusCodes.Status404NotFound);
+        }
+
+        var assignment = role.Assignments.FirstOrDefault(existingAssignment => existingAssignment.UserId == targetUserId);
+        if (assignment is not null)
+        {
+            serverRepository.RemoveRoleAssignments(new[] { assignment });
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
     }

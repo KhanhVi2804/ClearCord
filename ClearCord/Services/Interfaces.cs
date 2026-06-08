@@ -63,6 +63,7 @@ public interface IServerService
     Task<ServerInviteDto> GetInviteAsync(Guid serverId, string userId, CancellationToken cancellationToken = default);
     Task<ServerRoleDto> CreateRoleAsync(Guid serverId, string userId, CreateServerRoleRequest request, CancellationToken cancellationToken = default);
     Task AssignRoleAsync(Guid serverId, Guid roleId, string actingUserId, AssignServerRoleRequest request, CancellationToken cancellationToken = default);
+    Task RemoveRoleAsync(Guid serverId, Guid roleId, string targetUserId, string actingUserId, CancellationToken cancellationToken = default);
     Task KickMemberAsync(Guid serverId, string targetUserId, string actingUserId, ModerateMemberRequest request, CancellationToken cancellationToken = default);
     Task BanMemberAsync(Guid serverId, string targetUserId, string actingUserId, ModerateMemberRequest request, CancellationToken cancellationToken = default);
 }

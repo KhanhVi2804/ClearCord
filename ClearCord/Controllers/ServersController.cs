@@ -101,6 +101,14 @@ public sealed class ServersController(IServerService serverService) : Controller
         return NoContent();
     }
 
+    [HttpDelete("{serverId:guid}/roles/{roleId:guid}/assignments/{targetUserId}")]
+    public async Task<IActionResult> RemoveRole(Guid serverId, Guid roleId, string targetUserId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetRequiredUserId();
+        await serverService.RemoveRoleAsync(serverId, roleId, targetUserId, userId, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPost("{serverId:guid}/members/{targetUserId}/kick")]
     public async Task<IActionResult> Kick(Guid serverId, string targetUserId, [FromBody] ModerateMemberRequest request, CancellationToken cancellationToken)
     {

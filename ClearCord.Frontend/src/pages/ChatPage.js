@@ -4,7 +4,6 @@ import ChatBox from "../components/ChatBox";
 import ModalShell from "../components/ModalShell";
 import ProfilePanel from "../components/ProfilePanel";
 import SecondaryPanel from "../components/SecondaryPanel";
-import NavRail from "../components/NavRail";
 import ServerRail from "../components/ServerRail";
 import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
@@ -214,6 +213,8 @@ function ChatPage({
   const [selectedTextChannelId, setSelectedTextChannelId] = useState(null);
   const [activeVoiceChannelId, setActiveVoiceChannelId] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [voiceParticipants, setVoiceParticipants] = useState([]);
+  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
   const [friends, setFriends] = useState([]);
   const [directConversations, setDirectConversations] = useState([]);
   const [selectedDirectConversation, setSelectedDirectConversation] = useState(null);
@@ -240,6 +241,14 @@ function ChatPage({
   const [isJoinServerVisible, setIsJoinServerVisible] = useState(false);
   const [joinInviteCode, setJoinInviteCode] = useState(inviteCode || "");
   const [isJoiningServer, setIsJoiningServer] = useState(false);
+  const [channelDialog, setChannelDialog] = useState(null);
+  const [channelForm, setChannelForm] = useState({
+    name: "",
+    type: "Text",
+    categoryId: "",
+    topic: "",
+    position: 1
+  });
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [typingUsersMap, setTypingUsersMap] = useState(new Map());
@@ -854,6 +863,7 @@ function ChatPage({
     setSelectedDirectConversation(null);
     if (channel.type === "Voice") {
       setActiveVoiceChannelId(channel.id);
+      setIsVoiceSessionActive(true);
       setActiveView("voice");
       return;
     }
@@ -862,8 +872,72 @@ function ChatPage({
     setActiveView("chat");
   }
 
+  function openCreateChannelDialog(type = "Text", categoryId = "") {
+    setChannelForm({
+      name: "",
+      type,
+      categoryId: categoryId || "",
+      topic: "",
+      position: (selectedServer?.channels?.length || 0) + 1
+    });
+    setChannelDialog({ mode: "create" });
+  }
+
+  function openEditChannelDialog(channel) {
+    setChannelForm({
+      name: channel.name,
+      type: channel.type,
+      categoryId: channel.categoryId || "",
+      topic: channel.topic || "",
+      position: channel.position
+    });
+    setChannelDialog({ mode: "edit", channel });
+  }
+
+  async function handleSaveChannelDialog(event) {
+    event.preventDefault();
+
+    if (!selectedServer || !channelDialog) {
+      return;
+    }
+
+    const payload = {
+      name: channelForm.name,
+      type: channelForm.type,
+      categoryId: channelForm.categoryId || null,
+      topic: channelForm.topic || null,
+      position: Number(channelForm.position)
+    };
+
+    if (channelDialog.mode === "create") {
+      await channelApi.createChannel(selectedServer.id, payload);
+      await refreshSelectedServer(selectedServer.id);
+    } else {
+      await channelApi.updateChannel(channelDialog.channel.id, {
+        name: payload.name,
+        categoryId: payload.categoryId,
+        topic: payload.topic,
+        position: payload.position
+      });
+      await refreshSelectedServer();
+    }
+
+    setChannelDialog(null);
+  }
+
+  async function handleDeleteChannelFromDialog() {
+    if (channelDialog?.mode !== "edit") {
+      return;
+    }
+
+    await channelApi.deleteChannel(channelDialog.channel.id);
+    await refreshSelectedServer();
+    setChannelDialog(null);
+  }
+
   function handleSelectServer(serverId) {
     setSelectedDirectConversation(null);
+    setIsVoiceSessionActive(false);
     setSelectedServerId(serverId);
     setActiveView("chat");
   }
@@ -1105,6 +1179,8 @@ function ChatPage({
 
   const hasNoServers = !isServersLoading && servers.length === 0;
   const shouldShowFriendsHome = activeView === "friends" && !currentDirectChannel;
+  const shouldShowVoiceWorkspace = activeView === "voice" || Boolean(directVoiceConversation);
+  const shouldKeepVoiceSession = isVoiceSessionActive || Boolean(directVoiceConversation);
 
   return (
     <>
@@ -1116,16 +1192,9 @@ function ChatPage({
             activeView={activeView}
             currentUser={currentUser}
             onSelectServer={handleSelectServer}
-            onSelectView={handleSelectView}
             onOpenCreateServer={() => setIsCreateServerVisible(true)}
             onOpenJoinServer={() => setIsJoinServerVisible(true)}
             onOpenProfile={() => setActiveView("profile")}
-          />
-          <NavRail
-            activeView={activeView}
-            unreadNotificationCount={unreadNotificationCount}
-            canSeeAdmin={canSeeAdmin}
-            onSelectView={handleSelectView}
             onLogout={onLogout}
           />
         </div>
@@ -1135,9 +1204,16 @@ function ChatPage({
             activeView={activeView}
             server={selectedServer}
             selectedTextChannelId={selectedTextChannelId}
-            activeVoiceChannelId={activeVoiceChannelId}
+            activeVoiceChannelId={isVoiceSessionActive ? activeVoiceChannelId : null}
             connectionState={connectionState}
             onSelectChannel={handleSelectChannel}
+            canOpenServerSettings={canSeeAdmin}
+            onOpenServerSettings={() => setActiveView("admin")}
+            canManageChannels={permissions.has("ManageChannels")}
+            onCreateChannel={openCreateChannelDialog}
+            onEditChannel={openEditChannelDialog}
+            voiceParticipants={voiceParticipants}
+            currentUserId={currentUser.id}
             friends={friends}
             directConversations={directConversations}
             selectedDirectConversationId={selectedDirectConversation?.id ?? null}
@@ -1179,7 +1255,24 @@ function ChatPage({
         </div>
 
         <div className="chat-stage">
-          {shouldShowFriendsHome ? (
+          {shouldKeepVoiceSession && (
+            <VoicePanel
+              currentUser={currentUser}
+              currentChannel={currentVoiceTarget}
+              autoJoin
+              hidden={!shouldShowVoiceWorkspace}
+              onClose={() => {
+                setDirectVoiceConversation(null);
+                setIsVoiceSessionActive(false);
+                setActiveView("chat");
+                setVoiceParticipants([]);
+              }}
+              onParticipantsChange={(participants, channel) => {
+                setVoiceParticipants(channel?.isDirect ? [] : participants);
+              }}
+            />
+          )}
+          {!shouldShowVoiceWorkspace && shouldShowFriendsHome ? (
             <FriendsHomePanel
               friends={friends}
               friendRequests={friendRequests}
@@ -1192,7 +1285,7 @@ function ChatPage({
               onRejectRequest={(requestId) => handleRejectRequest(requestId).catch((error) => setSocialError(error.message))}
               onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
             />
-          ) : hasNoServers && !currentDirectChannel ? (
+          ) : !shouldShowVoiceWorkspace && hasNoServers && !currentDirectChannel ? (
             <section className="chat-panel empty-state-shell">
               <div className="empty-state-card">
                 <p className="eyebrow">{t("workspace.freshWorkspace")}</p>
@@ -1232,7 +1325,7 @@ function ChatPage({
                 </form>
               </div>
             </section>
-          ) : (
+          ) : !shouldShowVoiceWorkspace ? (
             <ChatBox
               currentUser={currentUser}
               currentServer={currentChatServer}
@@ -1257,8 +1350,11 @@ function ChatPage({
               onTogglePinMessage={handleTogglePin}
               onToggleReaction={handleToggleReaction}
               onViewUserProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+              unreadNotificationCount={unreadNotificationCount}
+              onOpenNotifications={() => setActiveView("notifications")}
+              onOpenFriends={() => setActiveView("friends")}
             />
-          )}
+          ) : null}
         </div>
 
         {directPeer ? (
@@ -1367,6 +1463,95 @@ function ChatPage({
         </ModalShell>
       )}
 
+      {channelDialog && (
+        <ModalShell
+          title={channelDialog.mode === "create" ? t("admin.createChannel") : t("admin.editChannel")}
+          subtitle={selectedServer?.name}
+          onClose={() => setChannelDialog(null)}
+        >
+          <form
+            className="channel-dialog-form"
+            onSubmit={(event) => {
+              handleSaveChannelDialog(event).catch((error) => setServersError(error.message));
+            }}
+          >
+            <label>
+              {t("admin.channelName")}
+              <input
+                type="text"
+                value={channelForm.name}
+                onChange={(event) => setChannelForm((current) => ({ ...current, name: event.target.value }))}
+                required
+              />
+            </label>
+
+            <label>
+              {t("admin.type")}
+              <select
+                value={channelForm.type}
+                onChange={(event) => setChannelForm((current) => ({ ...current, type: event.target.value }))}
+                disabled={channelDialog.mode === "edit"}
+              >
+                <option value="Text">{t("channel.textType")}</option>
+                <option value="Voice">{t("channel.voiceType")}</option>
+              </select>
+            </label>
+
+            <label>
+              {t("admin.category")}
+              <select
+                value={channelForm.categoryId}
+                onChange={(event) => setChannelForm((current) => ({ ...current, categoryId: event.target.value }))}
+              >
+                <option value="">{t("admin.noCategory")}</option>
+                {selectedServer?.categories?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              {t("admin.topic")}
+              <input
+                type="text"
+                value={channelForm.topic}
+                onChange={(event) => setChannelForm((current) => ({ ...current, topic: event.target.value }))}
+              />
+            </label>
+
+            <label>
+              {t("admin.position")}
+              <input
+                type="number"
+                value={channelForm.position}
+                onChange={(event) => setChannelForm((current) => ({ ...current, position: event.target.value }))}
+                required
+              />
+            </label>
+
+            <div className="inline-actions">
+              <button type="submit" className="primary-button">
+                {channelDialog.mode === "create" ? t("common.create") : t("common.save")}
+              </button>
+              {channelDialog.mode === "edit" && (
+                <button
+                  type="button"
+                  className="ghost-button danger"
+                  onClick={() => handleDeleteChannelFromDialog().catch((error) => setServersError(error.message))}
+                >
+                  {t("common.delete")}
+                </button>
+              )}
+              <button type="button" className="ghost-button" onClick={() => setChannelDialog(null)}>
+                {t("common.cancel")}
+              </button>
+            </div>
+          </form>
+        </ModalShell>
+      )}
+
       {isUserProfileVisible && (
         <UserProfileModal
           profile={selectedUserProfile}
@@ -1447,6 +1632,10 @@ function ChatPage({
               await serverApi.assignRole(serverId, roleId, userId);
               await refreshSelectedServer(serverId);
             }}
+            onRemoveRole={async (serverId, roleId, userId) => {
+              await serverApi.removeRole(serverId, roleId, userId);
+              await refreshSelectedServer(serverId);
+            }}
             onKickMember={async (serverId, userId, reason) => {
               await serverApi.kickMember(serverId, userId, reason);
               await refreshSelectedServer(serverId);
@@ -1459,18 +1648,6 @@ function ChatPage({
         </ModalShell>
       )}
 
-      {(activeView === "voice" || directVoiceConversation) && (
-        <ModalShell
-          wide
-          bare
-          onClose={() => {
-            setDirectVoiceConversation(null);
-            setActiveView("chat");
-          }}
-        >
-          <VoicePanel currentUser={currentUser} currentChannel={currentVoiceTarget} />
-        </ModalShell>
-      )}
     </>
   );
 }

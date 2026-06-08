@@ -9,6 +9,13 @@ function SecondaryPanel({
   activeVoiceChannelId,
   connectionState,
   onSelectChannel,
+  canOpenServerSettings,
+  onOpenServerSettings,
+  canManageChannels,
+  onCreateChannel,
+  onEditChannel,
+  voiceParticipants,
+  currentUserId,
   friends,
   directConversations,
   selectedDirectConversationId,
@@ -73,6 +80,13 @@ function SecondaryPanel({
       activeVoiceChannelId={activeVoiceChannelId}
       connectionState={connectionState}
       onSelectChannel={onSelectChannel}
+      canOpenServerSettings={canOpenServerSettings}
+      onOpenServerSettings={onOpenServerSettings}
+      canManageChannels={canManageChannels}
+      onCreateChannel={onCreateChannel}
+      onEditChannel={onEditChannel}
+      voiceParticipants={voiceParticipants}
+      currentUserId={currentUserId}
     />
   );
 }

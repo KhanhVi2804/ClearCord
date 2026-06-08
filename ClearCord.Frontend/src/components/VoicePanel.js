@@ -54,7 +54,12 @@ function MediaTile({ title, subtitle, stream, avatarUrl, isLocal }) {
 
 function VoicePanel({
   currentUser,
-  currentChannel
+  currentChannel,
+  autoJoin = false,
+  compact = false,
+  hidden = false,
+  onClose,
+  onParticipantsChange
 }) {
   const { t } = useI18n();
   const [participants, setParticipants] = useState([]);
@@ -73,6 +78,7 @@ function VoicePanel({
   const isDirectRef = useRef(Boolean(currentChannel?.isDirect));
   const previousChannelIdRef = useRef(currentChannel?.id ?? null);
   const isJoinedRef = useRef(false);
+  const autoJoinChannelIdRef = useRef(null);
 
   useEffect(() => {
     channelIdRef.current = currentChannel?.id ?? null;
@@ -82,6 +88,10 @@ function VoicePanel({
   useEffect(() => {
     isJoinedRef.current = isJoined;
   }, [isJoined]);
+
+  useEffect(() => {
+    onParticipantsChange?.(participants, currentChannel);
+  }, [currentChannel, onParticipantsChange, participants]);
 
   const remoteTiles = useMemo(
     () =>
@@ -157,6 +167,7 @@ function VoicePanel({
     previousChannelIdRef.current = currentChannel?.id ?? null;
 
     if (previousChannelId && previousChannelId !== currentChannel?.id) {
+      autoJoinChannelIdRef.current = null;
       leaveVoiceChannel();
     }
   }, [currentChannel?.id]);
@@ -164,8 +175,18 @@ function VoicePanel({
   useEffect(() => {
     return () => {
       leaveVoiceChannel();
+      onParticipantsChange?.([], currentChannel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!autoJoin || !currentChannel || autoJoinChannelIdRef.current === currentChannel.id) {
+      return;
+    }
+
+    autoJoinChannelIdRef.current = currentChannel.id;
+    joinVoiceChannel();
+  }, [autoJoin, currentChannel?.id]);
 
   useEffect(() => {
     if (!isJoined) {
@@ -194,7 +215,8 @@ function VoicePanel({
 
     if (nextScreenSharing) {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true
+        video: true,
+        audio: true
       });
 
       screenStreamRef.current = screenStream;
@@ -205,7 +227,12 @@ function VoicePanel({
           handleToggleScreenShare(false);
         };
       }
-    } else if (nextCameraEnabled) {
+    } else {
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
+
+    if (!nextScreenSharing && nextCameraEnabled) {
       const cameraStream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: true
@@ -232,7 +259,8 @@ function VoicePanel({
     const audioTrack = stream.getAudioTracks()[0] ?? null;
     const videoTrack = stream.getVideoTracks()[0] ?? null;
 
-    for (const connection of peerConnectionsRef.current.values()) {
+    for (const [targetUserId, connection] of peerConnectionsRef.current.entries()) {
+      let shouldRenegotiate = false;
       const senders = connection.getSenders();
       const audioSender = senders.find((sender) => sender.track?.kind === "audio");
       const videoSender = senders.find((sender) => sender.track?.kind === "video");
@@ -241,12 +269,14 @@ function VoicePanel({
         await audioSender.replaceTrack(audioTrack);
       } else if (!audioSender && audioTrack) {
         connection.addTrack(audioTrack, stream);
+        shouldRenegotiate = true;
       }
 
       if (videoSender && videoTrack) {
         await videoSender.replaceTrack(videoTrack);
       } else if (!videoSender && videoTrack) {
         connection.addTrack(videoTrack, stream);
+        shouldRenegotiate = true;
       }
 
       if (audioSender && !audioTrack) {
@@ -255,6 +285,10 @@ function VoicePanel({
 
       if (videoSender && !videoTrack) {
         await videoSender.replaceTrack(null);
+      }
+
+      if (shouldRenegotiate) {
+        await renegotiatePeerConnection(targetUserId, connection);
       }
     }
   }
@@ -361,6 +395,14 @@ function VoicePanel({
 
   async function createOfferFor(targetUserId) {
     const connection = ensurePeerConnection(targetUserId);
+    await renegotiatePeerConnection(targetUserId, connection);
+  }
+
+  async function renegotiatePeerConnection(targetUserId, connection) {
+    if (connection.signalingState !== "stable") {
+      return;
+    }
+
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
 
@@ -485,8 +527,14 @@ function VoicePanel({
       clearPeerConnections();
       cleanupLocalMedia();
       setRemoteStreams({});
+      setParticipants([]);
       setIsJoined(false);
     }
+  }
+
+  async function handleLeaveAndClose() {
+    await leaveVoiceChannel();
+    onClose?.();
   }
 
   async function handleToggleMute() {
@@ -558,10 +606,66 @@ function VoicePanel({
   }
 
   if (!currentChannel) {
-    return (
+    return compact ? null : (
       <section className="feature-panel">
         <div className="empty-panel">
           <p>{t("voice.empty")}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (hidden) {
+    return (
+      <section className="voice-hidden-media" aria-hidden="true">
+        {remoteTiles.map((participant) => (
+          <MediaTile
+            key={participant.userId}
+            title={participant.displayName}
+            subtitle=""
+            stream={participant.stream}
+            avatarUrl={participant.avatarUrl}
+          />
+        ))}
+      </section>
+    );
+  }
+
+  if (compact) {
+    return (
+      <section className="voice-compact-panel">
+        <div className="voice-compact-copy">
+          <span className="material-symbols-outlined">volume_up</span>
+          <div>
+            <strong>{currentChannel.name}</strong>
+            <p>
+              {error || (isBusy ? t("voice.joining") : t("voice.participants", { count: participants.length }))}
+            </p>
+          </div>
+        </div>
+
+        <div className="voice-compact-actions">
+          {!isJoined && (
+            <button type="button" onClick={joinVoiceChannel} disabled={isBusy} title={t("voice.joinCall")}>
+              <span className="material-symbols-outlined">call</span>
+            </button>
+          )}
+          <button type="button" onClick={handleToggleMute} disabled={isBusy || !isJoined} title={isMuted ? t("voice.unmute") : t("voice.mute")}>
+            <span className="material-symbols-outlined">{isMuted ? "mic_off" : "mic"}</span>
+          </button>
+          <button type="button" onClick={handleToggleCamera} disabled={isBusy || !isJoined} title={isCameraEnabled ? t("voice.turnCameraOff") : t("voice.turnCameraOn")}>
+            <span className="material-symbols-outlined">{isCameraEnabled ? "videocam" : "videocam_off"}</span>
+          </button>
+          <button
+            type="button"
+            className="danger"
+            onClick={() => {
+              handleLeaveAndClose();
+            }}
+            title={t("voice.leaveCall")}
+          >
+            <span className="material-symbols-outlined">call_end</span>
+          </button>
         </div>
       </section>
     );
@@ -581,7 +685,7 @@ function VoicePanel({
               {isBusy ? t("voice.joining") : t("voice.joinCall")}
             </button>
           ) : (
-            <button type="button" className="ghost-button danger" onClick={leaveVoiceChannel}>
+            <button type="button" className="ghost-button danger" onClick={handleLeaveAndClose}>
               {t("voice.leaveCall")}
             </button>
           )}

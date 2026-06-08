@@ -25,11 +25,15 @@ function ChatBox({
   onDeleteMessage,
   onTogglePinMessage,
   onToggleReaction,
-  onViewUserProfile
+  onViewUserProfile,
+  unreadNotificationCount,
+  onOpenNotifications,
+  onOpenFriends
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [messageSearchTerm, setMessageSearchTerm] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messageListRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -42,6 +46,10 @@ function ChatBox({
 
     messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
   }, [messages, currentChannel?.id]);
+
+  useEffect(() => {
+    setMessageSearchTerm("");
+  }, [currentChannel?.id]);
 
   useEffect(() => {
     return () => {
@@ -70,6 +78,22 @@ function ChatBox({
   }
 
   const pinnedMessages = messages.filter((message) => message.isPinned && !message.isDeleted).slice(-3);
+  const normalizedMessageSearch = messageSearchTerm.trim().toLowerCase();
+  const visibleMessages = normalizedMessageSearch
+    ? messages.filter((message) => {
+        const searchableText = [
+          message.content,
+          message.sender?.displayName,
+          message.sender?.userName,
+          message.attachments?.map((attachment) => attachment.fileName).join(" ")
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(normalizedMessageSearch);
+      })
+    : messages;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -142,17 +166,30 @@ function ChatBox({
           </div>
 
           <div className="chat-header-actions" aria-label="Channel actions">
-            <button type="button" title="Notifications">
+            <button
+              type="button"
+              className="chat-header-action"
+              title="Notifications"
+              onClick={onOpenNotifications}
+            >
               <span className="material-symbols-outlined">notifications</span>
+              {unreadNotificationCount > 0 && (
+                <span className="header-action-badge">{unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}</span>
+              )}
             </button>
             <button type="button" title="Pinned messages">
               <span className="material-symbols-outlined">push_pin</span>
             </button>
-            <button type="button" title="Members">
+            <button type="button" title={t("tabs.friends")} onClick={onOpenFriends}>
               <span className="material-symbols-outlined">group</span>
             </button>
             <label className="chat-search-mini">
-              <input type="search" placeholder={t("common.search")} />
+              <input
+                type="search"
+                value={messageSearchTerm}
+                onChange={(event) => setMessageSearchTerm(event.target.value)}
+                placeholder={t("chat.searchMessages")}
+              />
               <span className="material-symbols-outlined">search</span>
             </label>
             <button type="button" title="Help">
@@ -201,8 +238,12 @@ function ChatBox({
           <div className="empty-panel">
             <p>{t("chat.noMessages", { channel: currentChannel.name })}</p>
           </div>
+        ) : visibleMessages.length === 0 ? (
+          <div className="empty-panel">
+            <p>{t("chat.noSearchResults", { term: messageSearchTerm })}</p>
+          </div>
         ) : (
-          messages.map((message) => {
+          visibleMessages.map((message) => {
             const isOwnMessage = message.sender?.id === currentUser.id;
             const canEdit = !message.isDeleted && (isOwnMessage || canManageMessages);
             const canDelete = isOwnMessage || canManageMessages;
