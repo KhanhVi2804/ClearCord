@@ -31,3 +31,9 @@ public sealed record WebRtcSignalRequest(
     [param: Required] string TargetUserId,
     WebRtcSignalType Type,
     [param: Required] string Payload);
+
+public sealed record DirectWebRtcSignalRequest(
+    [param: Required] Guid DirectConversationId,
+    [param: Required] string TargetUserId,
+    WebRtcSignalType Type,
+    [param: Required] string Payload);

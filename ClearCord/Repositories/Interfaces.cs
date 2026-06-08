@@ -57,10 +57,19 @@ public interface IChannelRepository
     void RemoveCategory(ChannelCategory category);
 }
 
+public interface IDirectConversationRepository
+{
+    Task<DirectConversation?> GetByIdAsync(Guid conversationId, CancellationToken cancellationToken = default);
+    Task<DirectConversation?> GetBetweenUsersAsync(string userId, string otherUserId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<DirectConversation>> GetForUserAsync(string userId, CancellationToken cancellationToken = default);
+    Task AddAsync(DirectConversation conversation, CancellationToken cancellationToken = default);
+}
+
 public interface IMessageRepository
 {
     Task<Message?> GetByIdAsync(Guid messageId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Message>> GetChannelMessagesAsync(Guid channelId, int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<Message>> GetDirectConversationMessagesAsync(Guid conversationId, int page, int pageSize, CancellationToken cancellationToken = default);
     Task<MessageReaction?> GetReactionAsync(Guid messageId, string userId, string emoji, CancellationToken cancellationToken = default);
     Task AddMessageAsync(Message message, CancellationToken cancellationToken = default);
     Task AddReactionAsync(MessageReaction reaction, CancellationToken cancellationToken = default);
@@ -83,6 +92,16 @@ public interface IVoiceStateRepository
     Task AddAsync(VoiceChannelParticipant participant, CancellationToken cancellationToken = default);
     void Remove(VoiceChannelParticipant participant);
     void RemoveRange(IEnumerable<VoiceChannelParticipant> participants);
+}
+
+public interface IDirectVoiceStateRepository
+{
+    Task<DirectVoiceParticipant?> GetParticipantAsync(Guid conversationId, string userId, string connectionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<DirectVoiceParticipant>> GetParticipantsAsync(Guid conversationId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<DirectVoiceParticipant>> GetByConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+    Task AddAsync(DirectVoiceParticipant participant, CancellationToken cancellationToken = default);
+    void Remove(DirectVoiceParticipant participant);
+    void RemoveRange(IEnumerable<DirectVoiceParticipant> participants);
 }
 
 public interface IConnectionRepository

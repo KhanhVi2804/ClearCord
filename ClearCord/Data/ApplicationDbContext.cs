@@ -21,11 +21,13 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser>, I
     public DbSet<ServerBan> ServerBans => Set<ServerBan>();
     public DbSet<ChannelCategory> ChannelCategories => Set<ChannelCategory>();
     public DbSet<Channel> Channels => Set<Channel>();
+    public DbSet<DirectConversation> DirectConversations => Set<DirectConversation>();
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
     public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
     public DbSet<UserNotification> Notifications => Set<UserNotification>();
     public DbSet<VoiceChannelParticipant> VoiceChannelParticipants => Set<VoiceChannelParticipant>();
+    public DbSet<DirectVoiceParticipant> DirectVoiceParticipants => Set<DirectVoiceParticipant>();
     public DbSet<UserConnection> UserConnections => Set<UserConnection>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
 
@@ -161,10 +163,32 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser>, I
             .HasForeignKey(channel => channel.CategoryId)
             .OnDelete(DeleteBehavior.NoAction);
 
+        builder.Entity<DirectConversation>()
+            .HasIndex(conversation => new { conversation.UserAId, conversation.UserBId })
+            .IsUnique();
+
+        builder.Entity<DirectConversation>()
+            .HasOne(conversation => conversation.UserA)
+            .WithMany()
+            .HasForeignKey(conversation => conversation.UserAId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<DirectConversation>()
+            .HasOne(conversation => conversation.UserB)
+            .WithMany()
+            .HasForeignKey(conversation => conversation.UserBId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.Entity<Message>()
             .HasOne(message => message.Channel)
             .WithMany(channel => channel.Messages)
             .HasForeignKey(message => message.ChannelId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<Message>()
+            .HasOne(message => message.DirectConversation)
+            .WithMany(conversation => conversation.Messages)
+            .HasForeignKey(message => message.DirectConversationId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Entity<Message>()
@@ -234,6 +258,22 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser>, I
         builder.Entity<VoiceChannelParticipant>()
             .HasOne(participant => participant.User)
             .WithMany(user => user.VoiceParticipations)
+            .HasForeignKey(participant => participant.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<DirectVoiceParticipant>()
+            .HasIndex(participant => new { participant.DirectConversationId, participant.UserId, participant.ConnectionId })
+            .IsUnique();
+
+        builder.Entity<DirectVoiceParticipant>()
+            .HasOne(participant => participant.DirectConversation)
+            .WithMany(conversation => conversation.VoiceParticipants)
+            .HasForeignKey(participant => participant.DirectConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<DirectVoiceParticipant>()
+            .HasOne(participant => participant.User)
+            .WithMany(user => user.DirectVoiceParticipations)
             .HasForeignKey(participant => participant.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 

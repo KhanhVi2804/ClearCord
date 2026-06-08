@@ -2,6 +2,7 @@ using ClearCord.Common.Extensions;
 using ClearCord.DTOs;
 using ClearCord.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClearCord.Controllers;
@@ -38,6 +39,14 @@ public sealed class ServersController(IServerService serverService) : Controller
     {
         var userId = User.GetRequiredUserId();
         return Ok(await serverService.UpdateAsync(serverId, userId, request, cancellationToken));
+    }
+
+    [HttpPost("{serverId:guid}/icon")]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    public async Task<ActionResult<ServerSummaryDto>> UploadIcon(Guid serverId, [FromForm] IFormFile icon, CancellationToken cancellationToken)
+    {
+        var userId = User.GetRequiredUserId();
+        return Ok(await serverService.UploadIconAsync(serverId, userId, icon, cancellationToken));
     }
 
     [HttpDelete("{serverId:guid}")]
@@ -89,6 +98,14 @@ public sealed class ServersController(IServerService serverService) : Controller
     {
         var userId = User.GetRequiredUserId();
         await serverService.AssignRoleAsync(serverId, roleId, userId, request, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("{serverId:guid}/roles/{roleId:guid}/assignments/{targetUserId}")]
+    public async Task<IActionResult> RemoveRole(Guid serverId, Guid roleId, string targetUserId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetRequiredUserId();
+        await serverService.RemoveRoleAsync(serverId, roleId, targetUserId, userId, cancellationToken);
         return NoContent();
     }
 

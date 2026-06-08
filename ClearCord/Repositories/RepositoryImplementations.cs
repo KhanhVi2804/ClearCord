@@ -267,6 +267,51 @@ public sealed class ChannelRepository(ApplicationDbContext dbContext) : IChannel
     }
 }
 
+public sealed class DirectConversationRepository(ApplicationDbContext dbContext) : IDirectConversationRepository
+{
+    public async Task<DirectConversation?> GetByIdAsync(Guid conversationId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.DirectConversations
+            .Include(conversation => conversation.UserA)
+            .Include(conversation => conversation.UserB)
+            .FirstOrDefaultAsync(conversation => conversation.Id == conversationId, cancellationToken);
+    }
+
+    public async Task<DirectConversation?> GetBetweenUsersAsync(string userId, string otherUserId, CancellationToken cancellationToken = default)
+    {
+        var (userAId, userBId) = NormalizePair(userId, otherUserId);
+
+        return await dbContext.DirectConversations
+            .Include(conversation => conversation.UserA)
+            .Include(conversation => conversation.UserB)
+            .FirstOrDefaultAsync(
+                conversation => conversation.UserAId == userAId && conversation.UserBId == userBId,
+                cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<DirectConversation>> GetForUserAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.DirectConversations
+            .Include(conversation => conversation.UserA)
+            .Include(conversation => conversation.UserB)
+            .Where(conversation => conversation.UserAId == userId || conversation.UserBId == userId)
+            .OrderByDescending(conversation => conversation.LastActivityAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AddAsync(DirectConversation conversation, CancellationToken cancellationToken = default)
+    {
+        await dbContext.DirectConversations.AddAsync(conversation, cancellationToken);
+    }
+
+    public static (string UserAId, string UserBId) NormalizePair(string userId, string otherUserId)
+    {
+        return string.CompareOrdinal(userId, otherUserId) <= 0
+            ? (userId, otherUserId)
+            : (otherUserId, userId);
+    }
+}
+
 public sealed class MessageRepository(ApplicationDbContext dbContext) : IMessageRepository
 {
     public async Task<Message?> GetByIdAsync(Guid messageId, CancellationToken cancellationToken = default)
@@ -275,6 +320,11 @@ public sealed class MessageRepository(ApplicationDbContext dbContext) : IMessage
             .AsSplitQuery()
             .Include(message => message.Sender)
             .Include(message => message.Channel)
+                .ThenInclude(channel => channel!.Server)
+            .Include(message => message.DirectConversation)
+                .ThenInclude(conversation => conversation!.UserA)
+            .Include(message => message.DirectConversation)
+                .ThenInclude(conversation => conversation!.UserB)
             .Include(message => message.Attachments)
             .Include(message => message.Reactions)
                 .ThenInclude(reaction => reaction.User)
@@ -294,6 +344,23 @@ public sealed class MessageRepository(ApplicationDbContext dbContext) : IMessage
             .Include(message => message.ReplyToMessage)
                 .ThenInclude(reply => reply!.Sender)
             .Where(message => message.ChannelId == channelId)
+            .OrderByDescending(message => message.CreatedAt)
+            .Skip(Math.Max(0, page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Message>> GetDirectConversationMessagesAsync(Guid conversationId, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Messages
+            .AsSplitQuery()
+            .Include(message => message.Sender)
+            .Include(message => message.Attachments)
+            .Include(message => message.Reactions)
+                .ThenInclude(reaction => reaction.User)
+            .Include(message => message.ReplyToMessage)
+                .ThenInclude(reply => reply!.Sender)
+            .Where(message => message.DirectConversationId == conversationId)
             .OrderByDescending(message => message.CreatedAt)
             .Skip(Math.Max(0, page - 1) * pageSize)
             .Take(pageSize)
@@ -395,6 +462,52 @@ public sealed class VoiceStateRepository(ApplicationDbContext dbContext) : IVoic
     public void RemoveRange(IEnumerable<VoiceChannelParticipant> participants)
     {
         dbContext.VoiceChannelParticipants.RemoveRange(participants);
+    }
+}
+
+public sealed class DirectVoiceStateRepository(ApplicationDbContext dbContext) : IDirectVoiceStateRepository
+{
+    public async Task<DirectVoiceParticipant?> GetParticipantAsync(Guid conversationId, string userId, string connectionId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.DirectVoiceParticipants
+            .Include(participant => participant.User)
+            .FirstOrDefaultAsync(
+                participant => participant.DirectConversationId == conversationId &&
+                               participant.UserId == userId &&
+                               participant.ConnectionId == connectionId,
+                cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<DirectVoiceParticipant>> GetParticipantsAsync(Guid conversationId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.DirectVoiceParticipants
+            .Include(participant => participant.User)
+            .Where(participant => participant.DirectConversationId == conversationId)
+            .OrderBy(participant => participant.JoinedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<DirectVoiceParticipant>> GetByConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.DirectVoiceParticipants
+            .Include(participant => participant.User)
+            .Where(participant => participant.ConnectionId == connectionId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AddAsync(DirectVoiceParticipant participant, CancellationToken cancellationToken = default)
+    {
+        await dbContext.DirectVoiceParticipants.AddAsync(participant, cancellationToken);
+    }
+
+    public void Remove(DirectVoiceParticipant participant)
+    {
+        dbContext.DirectVoiceParticipants.Remove(participant);
+    }
+
+    public void RemoveRange(IEnumerable<DirectVoiceParticipant> participants)
+    {
+        dbContext.DirectVoiceParticipants.RemoveRange(participants);
     }
 }
 

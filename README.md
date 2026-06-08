@@ -75,6 +75,25 @@ App URLs:
 - `https://localhost:7187`
 - `http://localhost:5187`
 
+## Run on Another Windows Machine
+
+Use `START_HERE_WINDOWS.md` for the shortest clone/download instructions.
+
+Quick commands:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows.ps1
+```
+
+To create a downloadable Windows zip package:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-windows.ps1
+```
+
+The zip is written to `artifacts\ClearCord-win-x64.zip`.
+
 ## Local Development
 
 Run backend:

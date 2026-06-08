@@ -9,7 +9,16 @@ function SecondaryPanel({
   activeVoiceChannelId,
   connectionState,
   onSelectChannel,
+  canOpenServerSettings,
+  onOpenServerSettings,
+  canManageChannels,
+  onCreateChannel,
+  onEditChannel,
+  voiceParticipants,
+  currentUserId,
   friends,
+  directConversations,
+  selectedDirectConversationId,
   friendRequests,
   searchTerm,
   searchResults,
@@ -20,6 +29,9 @@ function SecondaryPanel({
   onAcceptFriendRequest,
   onRejectFriendRequest,
   onUnfriend,
+  onOpenDirectConversation,
+  onStartDirectChat,
+  onStartDirectCall,
   onViewProfile,
   notifications,
   onOpenNotification,
@@ -30,6 +42,8 @@ function SecondaryPanel({
     return (
       <FriendsPanel
         friends={friends}
+        directConversations={directConversations}
+        selectedDirectConversationId={selectedDirectConversationId}
         requests={friendRequests}
         searchTerm={searchTerm}
         searchResults={searchResults}
@@ -40,6 +54,9 @@ function SecondaryPanel({
         onAcceptRequest={onAcceptFriendRequest}
         onRejectRequest={onRejectFriendRequest}
         onUnfriend={onUnfriend}
+        onOpenDirectConversation={onOpenDirectConversation}
+        onStartDirectChat={onStartDirectChat}
+        onStartDirectCall={onStartDirectCall}
         onViewProfile={onViewProfile}
       />
     );
@@ -63,6 +80,13 @@ function SecondaryPanel({
       activeVoiceChannelId={activeVoiceChannelId}
       connectionState={connectionState}
       onSelectChannel={onSelectChannel}
+      canOpenServerSettings={canOpenServerSettings}
+      onOpenServerSettings={onOpenServerSettings}
+      canManageChannels={canManageChannels}
+      onCreateChannel={onCreateChannel}
+      onEditChannel={onEditChannel}
+      voiceParticipants={voiceParticipants}
+      currentUserId={currentUserId}
     />
   );
 }

@@ -25,11 +25,15 @@ function ChatBox({
   onDeleteMessage,
   onTogglePinMessage,
   onToggleReaction,
-  onViewUserProfile
+  onViewUserProfile,
+  unreadNotificationCount,
+  onOpenNotifications,
+  onOpenFriends
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [messageSearchTerm, setMessageSearchTerm] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messageListRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -44,6 +48,10 @@ function ChatBox({
   }, [messages, currentChannel?.id]);
 
   useEffect(() => {
+    setMessageSearchTerm("");
+  }, [currentChannel?.id]);
+
+  useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
         window.clearTimeout(typingTimeoutRef.current);
@@ -51,7 +59,9 @@ function ChatBox({
     };
   }, []);
 
-  if (!currentServer) {
+  const isDirectConversation = Boolean(currentChannel?.isDirect);
+
+  if (!currentServer && !isDirectConversation) {
     return (
       <section className="chat-panel empty-panel">
         <p>{t("chat.selectServer")}</p>
@@ -68,6 +78,22 @@ function ChatBox({
   }
 
   const pinnedMessages = messages.filter((message) => message.isPinned && !message.isDeleted).slice(-3);
+  const normalizedMessageSearch = messageSearchTerm.trim().toLowerCase();
+  const visibleMessages = normalizedMessageSearch
+    ? messages.filter((message) => {
+        const searchableText = [
+          message.content,
+          message.sender?.displayName,
+          message.sender?.userName,
+          message.attachments?.map((attachment) => attachment.fileName).join(" ")
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(normalizedMessageSearch);
+      })
+    : messages;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -118,18 +144,58 @@ function ChatBox({
     }, 1200);
   }
 
+  function handleFileSelection(event) {
+    setSelectedFiles(Array.from(event.target.files || []));
+  }
+
   return (
     <section className="chat-panel">
       <header className="chat-header">
-        <div className="chat-header-main">
-          <span className="channel-hash">#</span>
-          <h2>{currentChannel.name}</h2>
-          {currentChannel.topic ? (
-            <>
-              <span className="chat-header-divider" aria-hidden="true" />
-              <p className="chat-topic">{currentChannel.topic}</p>
-            </>
-          ) : null}
+        <div className="chat-header-row">
+          <div className="chat-header-main">
+            <span className="channel-hash material-symbols-outlined">
+              {isDirectConversation ? "alternate_email" : "tag"}
+            </span>
+            <h2>{currentChannel.name}</h2>
+            {currentChannel.topic ? (
+              <>
+                <span className="chat-header-divider" aria-hidden="true" />
+                <p className="chat-topic">{currentChannel.topic}</p>
+              </>
+            ) : null}
+          </div>
+
+          <div className="chat-header-actions" aria-label="Channel actions">
+            <button
+              type="button"
+              className="chat-header-action"
+              title="Notifications"
+              onClick={onOpenNotifications}
+            >
+              <span className="material-symbols-outlined">notifications</span>
+              {unreadNotificationCount > 0 && (
+                <span className="header-action-badge">{unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}</span>
+              )}
+            </button>
+            <button type="button" title="Pinned messages">
+              <span className="material-symbols-outlined">push_pin</span>
+            </button>
+            <button type="button" title={t("tabs.friends")} onClick={onOpenFriends}>
+              <span className="material-symbols-outlined">group</span>
+            </button>
+            <label className="chat-search-mini">
+              <input
+                type="search"
+                value={messageSearchTerm}
+                onChange={(event) => setMessageSearchTerm(event.target.value)}
+                placeholder={t("chat.searchMessages")}
+              />
+              <span className="material-symbols-outlined">search</span>
+            </label>
+            <button type="button" title="Help">
+              <span className="material-symbols-outlined">help</span>
+            </button>
+          </div>
         </div>
         {typingUsers.length > 0 && (
           <div className="typing-line">
@@ -172,18 +238,27 @@ function ChatBox({
           <div className="empty-panel">
             <p>{t("chat.noMessages", { channel: currentChannel.name })}</p>
           </div>
+        ) : visibleMessages.length === 0 ? (
+          <div className="empty-panel">
+            <p>{t("chat.noSearchResults", { term: messageSearchTerm })}</p>
+          </div>
         ) : (
-          messages.map((message) => {
-            const canEdit = !message.isDeleted && (message.sender?.id === currentUser.id || canManageMessages);
-            const canDelete = message.sender?.id === currentUser.id || canManageMessages;
+          visibleMessages.map((message) => {
+            const isOwnMessage = message.sender?.id === currentUser.id;
+            const canEdit = !message.isDeleted && (isOwnMessage || canManageMessages);
+            const canDelete = isOwnMessage || canManageMessages;
             const canPin = canPinMessages || canManageMessages;
 
             return (
-              <div key={message.id} data-message-id={message.id}>
+              <div
+                key={message.id}
+                data-message-id={message.id}
+                className={`message-row ${isOwnMessage ? "own" : ""}`}
+              >
                 <MessageItem
                   currentUserId={currentUser.id}
                   message={message}
-                  isOwnMessage={message.sender?.id === currentUser.id}
+                  isOwnMessage={isOwnMessage}
                   isEditing={editingMessageId === message.id}
                   canEdit={canEdit}
                   canDelete={canDelete}
@@ -248,16 +323,23 @@ function ChatBox({
         </div>
 
         <div className="composer-actions">
-          <label className="file-upload-button">
-            {t("chat.attach")}
+          <div className="file-upload-control">
+            <span className="material-symbols-outlined">add_circle</span>
+            <span>{t("chat.attach")}</span>
             <input
               type="file"
               multiple
-              onChange={(event) => {
-                setSelectedFiles(Array.from(event.target.files || []));
-              }}
+              className="native-file-input"
+              title={t("chat.attach")}
+              onChange={handleFileSelection}
             />
-          </label>
+          </div>
+          <button type="button" className="composer-icon-button" title="GIF">
+            GIF
+          </button>
+          <button type="button" className="composer-icon-button" title="Emoji">
+            <span className="material-symbols-outlined">mood</span>
+          </button>
 
           <button
             type="submit"

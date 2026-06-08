@@ -26,9 +26,11 @@ function normalizeMessage(message) {
     return null;
   }
 
-  return {
+    return {
     id: message.id ?? message.Id,
     channelId: message.channelId ?? message.ChannelId,
+    directConversationId:
+      message.directConversationId ?? message.DirectConversationId ?? null,
     content: message.content ?? message.Content ?? "",
     isEdited: message.isEdited ?? message.IsEdited ?? false,
     isDeleted: message.isDeleted ?? message.IsDeleted ?? false,
@@ -95,6 +97,8 @@ function normalizePresence(payload) {
 function normalizeTyping(payload) {
   return {
     channelId: payload?.channelId ?? payload?.ChannelId,
+    directConversationId:
+      payload?.directConversationId ?? payload?.DirectConversationId ?? null,
     userId: payload?.userId ?? payload?.UserId,
     isTyping: payload?.isTyping ?? payload?.IsTyping ?? false
   };
@@ -116,9 +120,25 @@ function normalizeVoiceParticipant(participant) {
   };
 }
 
+function normalizeVoiceParticipantsPayload(payload) {
+  const participants = Array.isArray(payload)
+    ? payload
+    : payload?.participants ?? payload?.Participants ?? [];
+
+  return {
+    channelId: Array.isArray(payload) ? null : payload?.channelId ?? payload?.ChannelId ?? null,
+    directConversationId: Array.isArray(payload)
+      ? null
+      : payload?.directConversationId ?? payload?.DirectConversationId ?? null,
+    participants: participants.map(normalizeVoiceParticipant)
+  };
+}
+
 function normalizeSignal(signal) {
   return {
     channelId: signal?.channelId ?? signal?.ChannelId,
+    directConversationId:
+      signal?.directConversationId ?? signal?.DirectConversationId ?? null,
     sourceUserId: signal?.sourceUserId ?? signal?.SourceUserId,
     targetUserId: signal?.targetUserId ?? signal?.TargetUserId,
     type: signal?.type ?? signal?.Type,
@@ -131,6 +151,7 @@ class ChatSignalRService {
     this.connection = null;
     this.startPromise = null;
     this.joinedChannelIds = new Set();
+    this.joinedDirectConversationIds = new Set();
     this.activeVoiceSession = null;
     this.connectionStateHandlers = new Set();
     this.eventHandlers = {
@@ -195,10 +216,7 @@ class ChatSignalRService {
     });
 
     connection.on("voiceParticipantsUpdated", (participants) => {
-      this.emit(
-        "voiceParticipantsUpdated",
-        (participants ?? []).map(normalizeVoiceParticipant)
-      );
+      this.emit("voiceParticipantsUpdated", normalizeVoiceParticipantsPayload(participants));
     });
 
     connection.on("webrtcSignal", (signal) => {
@@ -220,7 +238,15 @@ class ChatSignalRService {
         }
       }
 
-      if (this.activeVoiceSession?.channelId) {
+      for (const conversationId of this.joinedDirectConversationIds) {
+        try {
+          await connection.invoke("JoinDirectConversation", conversationId);
+        } catch (error) {
+          console.error("Failed to rejoin direct conversation after reconnect.", error);
+        }
+      }
+
+      if (this.activeVoiceSession?.kind === "channel" && this.activeVoiceSession?.channelId) {
         try {
           await connection.invoke(
             "JoinVoiceChannel",
@@ -231,6 +257,20 @@ class ChatSignalRService {
           );
         } catch (error) {
           console.error("Failed to rejoin voice channel after reconnect.", error);
+        }
+      }
+
+      if (this.activeVoiceSession?.kind === "direct" && this.activeVoiceSession?.directConversationId) {
+        try {
+          await connection.invoke(
+            "JoinDirectVoice",
+            this.activeVoiceSession.directConversationId,
+            this.activeVoiceSession.isMuted,
+            this.activeVoiceSession.isCameraEnabled,
+            this.activeVoiceSession.isScreenSharing
+          );
+        } catch (error) {
+          console.error("Failed to rejoin direct call after reconnect.", error);
         }
       }
     });
@@ -343,9 +383,37 @@ class ChatSignalRService {
     this.joinedChannelIds.delete(channelId);
   }
 
+  async joinDirectConversation(conversationId) {
+    const connection = await this.ensureConnection();
+
+    if (this.joinedDirectConversationIds.has(conversationId)) {
+      return;
+    }
+
+    await connection.invoke("JoinDirectConversation", conversationId);
+    this.joinedDirectConversationIds.add(conversationId);
+  }
+
+  async leaveDirectConversation(conversationId) {
+    if (!conversationId || !this.connection) {
+      return;
+    }
+
+    if (this.connection.state === HubConnectionState.Connected) {
+      await this.connection.invoke("LeaveDirectConversation", conversationId);
+    }
+
+    this.joinedDirectConversationIds.delete(conversationId);
+  }
+
   async sendTyping(channelId, isTyping) {
     const connection = await this.ensureConnection();
     await connection.invoke("SendTyping", channelId, isTyping);
+  }
+
+  async sendDirectTyping(conversationId, isTyping) {
+    const connection = await this.ensureConnection();
+    await connection.invoke("SendDirectTyping", conversationId, isTyping);
   }
 
   async sendMessage(payload) {
@@ -353,6 +421,16 @@ class ChatSignalRService {
 
     return connection.invoke("SendMessage", {
       channelId: payload.channelId,
+      content: payload.content,
+      replyToMessageId: payload.replyToMessageId ?? null
+    });
+  }
+
+  async sendDirectMessage(payload) {
+    const connection = await this.ensureConnection();
+
+    return connection.invoke("SendDirectMessage", {
+      directConversationId: payload.directConversationId,
       content: payload.content,
       replyToMessageId: payload.replyToMessageId ?? null
     });
@@ -368,6 +446,7 @@ class ChatSignalRService {
     };
 
     this.activeVoiceSession = voiceState;
+    this.activeVoiceSession.kind = "channel";
     this.joinedChannelIds.add(channelId);
 
     const participants = await connection.invoke(
@@ -396,7 +475,7 @@ class ChatSignalRService {
 
     this.joinedChannelIds.delete(channelId);
 
-    if (this.activeVoiceSession?.channelId === channelId) {
+    if (this.activeVoiceSession?.kind === "channel" && this.activeVoiceSession?.channelId === channelId) {
       this.activeVoiceSession = null;
     }
 
@@ -412,6 +491,7 @@ class ChatSignalRService {
     }
 
     this.activeVoiceSession = {
+      kind: "channel",
       channelId: targetChannelId,
       isMuted: Boolean(state?.isMuted),
       isCameraEnabled: Boolean(state?.isCameraEnabled),
@@ -434,6 +514,87 @@ class ChatSignalRService {
 
     await connection.invoke("SendWebRtcSignal", {
       channelId: payload.channelId,
+      targetUserId: payload.targetUserId,
+      type: payload.type,
+      payload: payload.payload
+    });
+  }
+
+  async joinDirectVoice(conversationId, state) {
+    const connection = await this.ensureConnection();
+    const voiceState = {
+      kind: "direct",
+      directConversationId: conversationId,
+      isMuted: Boolean(state?.isMuted),
+      isCameraEnabled: Boolean(state?.isCameraEnabled),
+      isScreenSharing: Boolean(state?.isScreenSharing)
+    };
+
+    this.activeVoiceSession = voiceState;
+    this.joinedDirectConversationIds.add(conversationId);
+
+    const participants = await connection.invoke(
+      "JoinDirectVoice",
+      conversationId,
+      voiceState.isMuted,
+      voiceState.isCameraEnabled,
+      voiceState.isScreenSharing
+    );
+
+    return (participants ?? []).map(normalizeVoiceParticipant);
+  }
+
+  async leaveDirectVoice(conversationId = this.activeVoiceSession?.directConversationId) {
+    if (!conversationId || !this.connection) {
+      this.activeVoiceSession = null;
+      return [];
+    }
+
+    let participants = [];
+
+    if (this.connection.state === HubConnectionState.Connected) {
+      participants = await this.connection.invoke("LeaveDirectVoice", conversationId);
+    }
+
+    if (this.activeVoiceSession?.kind === "direct" && this.activeVoiceSession?.directConversationId === conversationId) {
+      this.activeVoiceSession = null;
+    }
+
+    return (participants ?? []).map(normalizeVoiceParticipant);
+  }
+
+  async updateDirectVoiceState(conversationId, state) {
+    const connection = await this.ensureConnection();
+    const targetConversationId = conversationId ?? this.activeVoiceSession?.directConversationId;
+
+    if (!targetConversationId) {
+      return [];
+    }
+
+    this.activeVoiceSession = {
+      kind: "direct",
+      directConversationId: targetConversationId,
+      isMuted: Boolean(state?.isMuted),
+      isCameraEnabled: Boolean(state?.isCameraEnabled),
+      isScreenSharing: Boolean(state?.isScreenSharing)
+    };
+
+    const participants = await connection.invoke(
+      "UpdateDirectVoiceState",
+      targetConversationId,
+      this.activeVoiceSession.isMuted,
+      this.activeVoiceSession.isCameraEnabled,
+      this.activeVoiceSession.isScreenSharing
+    );
+
+    return (participants ?? []).map(normalizeVoiceParticipant);
+  }
+
+  async sendDirectWebRtcSignal(payload) {
+    const connection = await this.ensureConnection();
+
+    await connection.invoke("SendDirectWebRtcSignal", {
+      directConversationId: payload.directConversationId,
       targetUserId: payload.targetUserId,
       type: payload.type,
       payload: payload.payload
@@ -491,6 +652,7 @@ class ChatSignalRService {
 
   async stop() {
     this.joinedChannelIds.clear();
+    this.joinedDirectConversationIds.clear();
     this.activeVoiceSession = null;
 
     if (this.connection) {

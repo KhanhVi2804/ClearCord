@@ -4,17 +4,18 @@ import ChatBox from "../components/ChatBox";
 import ModalShell from "../components/ModalShell";
 import ProfilePanel from "../components/ProfilePanel";
 import SecondaryPanel from "../components/SecondaryPanel";
-import NavRail from "../components/NavRail";
 import ServerRail from "../components/ServerRail";
 import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
 import WorkspaceRail from "../components/WorkspaceRail";
 import {
   channelApi,
+  directApi,
   friendApi,
   messageApi,
   notificationApi,
   serverApi,
+  toAssetUrl,
   updateStoredUser,
   userApi
 } from "../services/api";
@@ -28,6 +29,174 @@ import {
   upsertMessage
 } from "./chatHelpers";
 import { useI18n } from "../i18n";
+
+function FriendsHomePanel({
+  friends,
+  friendRequests,
+  searchTerm,
+  onSearchTermChange,
+  onFocusSearch,
+  onStartDirectChat,
+  onStartDirectCall,
+  onAcceptRequest,
+  onRejectRequest,
+  onViewProfile
+}) {
+  const { t } = useI18n();
+  const [filter, setFilter] = useState("online");
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const visibleFriends = friends.filter((friend) => {
+    const matchesSearch =
+      !normalizedSearch ||
+      friend.displayName.toLowerCase().includes(normalizedSearch) ||
+      friend.userName.toLowerCase().includes(normalizedSearch);
+
+    if (!matchesSearch) {
+      return false;
+    }
+
+    return filter === "online" ? friend.isOnline : true;
+  });
+
+  const pendingCount = friendRequests.length;
+
+  return (
+    <section className="chat-panel friends-main-panel">
+      <header className="friends-topbar">
+        <div className="friends-topbar-title">
+          <span className="material-like">person</span>
+          <h2>{t("tabs.friends")}</h2>
+        </div>
+        <nav className="friends-filter-tabs">
+          <button type="button" className={filter === "online" ? "active" : ""} onClick={() => setFilter("online")}>
+            {t("common.online")}
+          </button>
+          <button type="button" className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>
+            {t("common.all")}
+          </button>
+          <button type="button" className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}>
+            {t("friends.pendingRequests")}
+            {pendingCount > 0 ? ` ${pendingCount}` : ""}
+          </button>
+          <button type="button" className="add-friend-tab" onClick={onFocusSearch}>
+            {t("friends.addFriend")}
+          </button>
+        </nav>
+      </header>
+
+      <div className="friends-main-body">
+        <section className="friends-list-body">
+          <label className="friends-search-bar">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => onSearchTermChange(event.target.value)}
+              placeholder={t("friends.searchPlaceholder")}
+            />
+            <span>search</span>
+          </label>
+
+          {filter === "pending" ? (
+            <div className="discord-list">
+              <p className="discord-section-label">{t("friends.pendingRequests")} - {friendRequests.length}</p>
+              {friendRequests.map((request) => (
+                <article key={request.id} className="discord-friend-row">
+                  <div className="discord-friend-main">
+                    <div className="avatar-badge">
+                      {request.user.avatarUrl ? (
+                        <img src={toAssetUrl(request.user.avatarUrl)} alt={request.user.displayName} className="avatar-image" />
+                      ) : (
+                        <span>{request.user.displayName?.[0]?.toUpperCase() || "U"}</span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{request.user.displayName}</strong>
+                      <p>@{request.user.userName}</p>
+                    </div>
+                  </div>
+                  <div className="discord-row-actions">
+                    <button type="button" onClick={() => onAcceptRequest(request.id)}>{t("friends.accept")}</button>
+                    <button type="button" onClick={() => onRejectRequest(request.id)}>{t("friends.reject")}</button>
+                  </div>
+                </article>
+              ))}
+              {!friendRequests.length && <p className="muted-copy">{t("friends.noRequests")}</p>}
+            </div>
+          ) : (
+            <div className="discord-list">
+              <p className="discord-section-label">
+                {filter === "online" ? t("common.online") : t("common.all")} - {visibleFriends.length}
+              </p>
+              {visibleFriends.map((friend) => (
+                <article key={friend.userId} className="discord-friend-row">
+                  <div className="discord-friend-main">
+                    <div className="relative-avatar">
+                      <div className="avatar-badge">
+                        {friend.avatarUrl ? (
+                          <img src={toAssetUrl(friend.avatarUrl)} alt={friend.displayName} className="avatar-image" />
+                        ) : (
+                          <span>{friend.displayName?.[0]?.toUpperCase() || friend.userName?.[0]?.toUpperCase() || "U"}</span>
+                        )}
+                      </div>
+                      <span className={`presence-dot ${friend.isOnline ? "online" : "offline"}`} />
+                    </div>
+                    <div>
+                      <strong>{friend.displayName}</strong>
+                      <p>@{friend.userName} - {friend.isOnline ? t("common.online") : t("common.offline")}</p>
+                    </div>
+                  </div>
+                  <div className="discord-row-actions">
+                    <button type="button" title={t("friends.message")} onClick={() => onStartDirectChat(friend.userId)}>
+                      chat
+                    </button>
+                    <button type="button" title={t("friends.call")} onClick={() => onStartDirectCall(friend.userId)}>
+                      call
+                    </button>
+                    <button type="button" title={t("friends.viewProfile")} onClick={() => onViewProfile(friend.userId)}>
+                      more
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {!visibleFriends.length && <p className="muted-copy">{t("friends.noFriends")}</p>}
+            </div>
+          )}
+        </section>
+
+        <aside className="active-now-panel">
+          <h3>{t("friends.activeNow")}</h3>
+          {friends.filter((friend) => friend.isOnline).slice(0, 2).map((friend) => (
+            <article key={friend.userId} className="active-card">
+              <div className="discord-friend-main">
+                <div className="avatar-badge small">
+                  {friend.avatarUrl ? (
+                    <img src={toAssetUrl(friend.avatarUrl)} alt={friend.displayName} className="avatar-image" />
+                  ) : (
+                    <span>{friend.displayName?.[0]?.toUpperCase() || "U"}</span>
+                  )}
+                </div>
+                <div>
+                  <strong>{friend.displayName}</strong>
+                  <p>{t("common.online")}</p>
+                </div>
+              </div>
+              <div className="active-card-inner">
+                <span>chat_bubble</span>
+                <p>{t("friends.readyToChat")}</p>
+              </div>
+            </article>
+          ))}
+          {friends.filter((friend) => friend.isOnline).length === 0 && (
+            <div className="active-empty">
+              <strong>{t("friends.quietNow")}</strong>
+              <p>{t("friends.quietNowBody")}</p>
+            </div>
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
 
 function ChatPage({
   currentUser,
@@ -44,7 +213,12 @@ function ChatPage({
   const [selectedTextChannelId, setSelectedTextChannelId] = useState(null);
   const [activeVoiceChannelId, setActiveVoiceChannelId] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [voiceParticipants, setVoiceParticipants] = useState([]);
+  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
   const [friends, setFriends] = useState([]);
+  const [directConversations, setDirectConversations] = useState([]);
+  const [selectedDirectConversation, setSelectedDirectConversation] = useState(null);
+  const [directVoiceConversation, setDirectVoiceConversation] = useState(null);
   const [friendRequests, setFriendRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -67,6 +241,14 @@ function ChatPage({
   const [isJoinServerVisible, setIsJoinServerVisible] = useState(false);
   const [joinInviteCode, setJoinInviteCode] = useState(inviteCode || "");
   const [isJoiningServer, setIsJoiningServer] = useState(false);
+  const [channelDialog, setChannelDialog] = useState(null);
+  const [channelForm, setChannelForm] = useState({
+    name: "",
+    type: "Text",
+    categoryId: "",
+    topic: "",
+    position: 1
+  });
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [typingUsersMap, setTypingUsersMap] = useState(new Map());
@@ -75,6 +257,7 @@ function ChatPage({
   const [isUserProfileLoading, setIsUserProfileLoading] = useState(false);
   const [userProfileError, setUserProfileError] = useState("");
   const previousTextChannelIdRef = useRef(null);
+  const previousDirectConversationIdRef = useRef(null);
   const processedInviteCodeRef = useRef(null);
 
   const currentTextChannel = useMemo(
@@ -86,6 +269,34 @@ function ChatPage({
     () => selectedServer?.channels?.find((channel) => channel.id === activeVoiceChannelId) ?? null,
     [activeVoiceChannelId, selectedServer]
   );
+
+  const currentDirectChannel = useMemo(
+    () =>
+      selectedDirectConversation
+        ? {
+            id: selectedDirectConversation.id,
+            name: selectedDirectConversation.otherUser?.displayName || selectedDirectConversation.otherUser?.userName || "Direct message",
+            topic: "Direct message",
+            isDirect: true
+          }
+        : null,
+    [selectedDirectConversation]
+  );
+
+  const currentChatChannel = currentDirectChannel ?? currentTextChannel;
+  const currentChatServer = currentDirectChannel
+    ? { id: "direct", name: "Direct Messages" }
+    : selectedServer;
+
+  const currentVoiceTarget = directVoiceConversation
+    ? {
+        id: directVoiceConversation.id,
+        name: directVoiceConversation.otherUser?.displayName || directVoiceConversation.otherUser?.userName || "Direct call",
+        isDirect: true
+      }
+    : currentVoiceChannel;
+
+  const directPeer = selectedDirectConversation?.otherUser ?? null;
 
   const permissions = useMemo(
     () => computePermissions(selectedServer, currentUser.id),
@@ -127,12 +338,18 @@ function ChatPage({
   useEffect(() => {
     const unsubscribeConnection = chatSignalR.onConnectionStateChanged(setConnectionState);
     const unsubscribeCreated = chatSignalR.onMessageCreated((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribeUpdated = chatSignalR.onMessageUpdated((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
@@ -140,12 +357,18 @@ function ChatPage({
       setMessages((current) => markMessageDeleted(current, messageId));
     });
     const unsubscribeReactions = chatSignalR.onMessageReactionChanged((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribePinned = chatSignalR.onMessagePinnedChanged((incomingMessage) => {
-      if (incomingMessage.channelId === selectedTextChannelId) {
+      if (
+        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
+        incomingMessage.directConversationId === selectedDirectConversation?.id
+      ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
@@ -192,7 +415,11 @@ function ChatPage({
         );
       });
     const unsubscribeTyping = chatSignalR.onTypingChanged((payload) => {
-      if (payload.channelId === selectedTextChannelId && payload.userId !== currentUser.id) {
+      if (
+        ((!selectedDirectConversation && payload.channelId === selectedTextChannelId) ||
+          payload.directConversationId === selectedDirectConversation?.id) &&
+        payload.userId !== currentUser.id
+      ) {
         setTypingUsersMap((current) => new Map(current).set(payload.userId, payload.isTyping));
       }
     });
@@ -208,7 +435,7 @@ function ChatPage({
       unsubscribePresence();
       unsubscribeTyping();
     };
-  }, [currentUser, onCurrentUserChange, selectedTextChannelId]);
+  }, [currentUser, onCurrentUserChange, selectedDirectConversation?.id, selectedTextChannelId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -220,11 +447,12 @@ function ChatPage({
       setSocialError("");
 
       try {
-        const [serverList, nextFriends, nextRequests, nextNotifications] = await Promise.all([
+        const [serverList, nextFriends, nextRequests, nextNotifications, nextDirectConversations] = await Promise.all([
           serverApi.getServers(),
           friendApi.getFriends(),
           friendApi.getRequests(),
-          notificationApi.getMine()
+          notificationApi.getMine(),
+          directApi.getConversations()
         ]);
 
         if (!isMounted) {
@@ -233,6 +461,7 @@ function ChatPage({
 
         setServers(serverList);
         setFriends(nextFriends);
+        setDirectConversations(nextDirectConversations);
         setFriendRequests(nextRequests);
         setNotifications(sortNotifications(nextNotifications));
         setSelectedServerId((current) =>
@@ -332,6 +561,10 @@ function ChatPage({
       setReplyToMessage(null);
       setEditingMessageId(null);
 
+      if (selectedDirectConversation) {
+        return;
+      }
+
       if (previousTextChannelIdRef.current && previousTextChannelIdRef.current !== selectedTextChannelId) {
         try {
           await chatSignalR.leaveChannel(previousTextChannelIdRef.current);
@@ -372,7 +605,76 @@ function ChatPage({
     return () => {
       isMounted = false;
     };
-  }, [selectedTextChannelId]);
+  }, [selectedDirectConversation, selectedTextChannelId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function syncDirectConversationState() {
+      const previousConversationId = previousDirectConversationIdRef.current;
+      const nextConversationId = selectedDirectConversation?.id ?? null;
+
+      if (
+        previousConversationId &&
+        previousConversationId !== nextConversationId &&
+        previousConversationId !== directVoiceConversation?.id
+      ) {
+        try {
+          await chatSignalR.leaveDirectConversation(previousConversationId);
+        } catch (error) {
+          console.warn("Failed to leave previous direct conversation.", error);
+        }
+      }
+
+      if (!selectedDirectConversation) {
+        if (previousConversationId !== directVoiceConversation?.id) {
+          previousDirectConversationIdRef.current = null;
+        }
+        return;
+      }
+
+      setSendError("");
+      setMessageError("");
+      setTypingUsersMap(new Map());
+      setReplyToMessage(null);
+      setEditingMessageId(null);
+      setIsMessagesLoading(true);
+
+      if (previousTextChannelIdRef.current) {
+        try {
+          await chatSignalR.leaveChannel(previousTextChannelIdRef.current);
+        } catch (error) {
+          console.warn("Failed to leave previous channel.", error);
+        }
+
+        previousTextChannelIdRef.current = null;
+      }
+
+      try {
+        await chatSignalR.joinDirectConversation(selectedDirectConversation.id);
+        const directMessages = await directApi.getMessages(selectedDirectConversation.id);
+
+        if (isMounted) {
+          previousDirectConversationIdRef.current = selectedDirectConversation.id;
+          setMessages(directMessages);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessageError(error.message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsMessagesLoading(false);
+        }
+      }
+    }
+
+    syncDirectConversationState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [directVoiceConversation?.id, selectedDirectConversation]);
 
   useEffect(() => {
     if (!inviteCode || processedInviteCodeRef.current === inviteCode) {
@@ -452,6 +754,18 @@ function ChatPage({
     setFriendRequests(nextRequests);
   }
 
+  async function refreshDirectConversations(preferredConversationId) {
+    const nextConversations = await directApi.getConversations();
+    setDirectConversations(nextConversations);
+
+    if (preferredConversationId) {
+      const preferredConversation = nextConversations.find((conversation) => conversation.id === preferredConversationId);
+      if (preferredConversation) {
+        setSelectedDirectConversation(preferredConversation);
+      }
+    }
+  }
+
   useEffect(() => {
     if (activeView !== "friends") {
       return;
@@ -466,7 +780,21 @@ function ChatPage({
     setSendError("");
 
     try {
-      if (files?.length > 0) {
+      if (selectedDirectConversation) {
+        if (files?.length > 0) {
+          await directApi.createMessageWithFiles(selectedDirectConversation.id, {
+            content,
+            replyToMessageId,
+            files
+          });
+        } else {
+          await chatSignalR.sendDirectMessage({
+            directConversationId: selectedDirectConversation.id,
+            content,
+            replyToMessageId
+          });
+        }
+      } else if (files?.length > 0) {
         await messageApi.createMessageWithFiles(selectedTextChannelId, {
           content,
           replyToMessageId,
@@ -532,14 +860,161 @@ function ChatPage({
   }
 
   function handleSelectChannel(channel) {
+    setSelectedDirectConversation(null);
     if (channel.type === "Voice") {
       setActiveVoiceChannelId(channel.id);
+      setIsVoiceSessionActive(true);
       setActiveView("voice");
       return;
     }
 
     setSelectedTextChannelId(channel.id);
     setActiveView("chat");
+  }
+
+  function openCreateChannelDialog(type = "Text", categoryId = "") {
+    setChannelForm({
+      name: "",
+      type,
+      categoryId: categoryId || "",
+      topic: "",
+      position: (selectedServer?.channels?.length || 0) + 1
+    });
+    setChannelDialog({ mode: "create" });
+  }
+
+  function openEditChannelDialog(channel) {
+    setChannelForm({
+      name: channel.name,
+      type: channel.type,
+      categoryId: channel.categoryId || "",
+      topic: channel.topic || "",
+      position: channel.position
+    });
+    setChannelDialog({ mode: "edit", channel });
+  }
+
+  async function handleSaveChannelDialog(event) {
+    event.preventDefault();
+
+    if (!selectedServer || !channelDialog) {
+      return;
+    }
+
+    const payload = {
+      name: channelForm.name,
+      type: channelForm.type,
+      categoryId: channelForm.categoryId || null,
+      topic: channelForm.topic || null,
+      position: Number(channelForm.position)
+    };
+
+    if (channelDialog.mode === "create") {
+      await channelApi.createChannel(selectedServer.id, payload);
+      await refreshSelectedServer(selectedServer.id);
+    } else {
+      await channelApi.updateChannel(channelDialog.channel.id, {
+        name: payload.name,
+        categoryId: payload.categoryId,
+        topic: payload.topic,
+        position: payload.position
+      });
+      await refreshSelectedServer();
+    }
+
+    setChannelDialog(null);
+  }
+
+  async function handleDeleteChannelFromDialog() {
+    if (channelDialog?.mode !== "edit") {
+      return;
+    }
+
+    await channelApi.deleteChannel(channelDialog.channel.id);
+    await refreshSelectedServer();
+    setChannelDialog(null);
+  }
+
+  function handleSelectServer(serverId) {
+    setSelectedDirectConversation(null);
+    setIsVoiceSessionActive(false);
+    setSelectedServerId(serverId);
+    setActiveView("chat");
+  }
+
+  function handleSelectView(view) {
+    if (view === "chat") {
+      setSelectedDirectConversation(null);
+    }
+
+    setActiveView(view);
+  }
+
+  function handleFocusFriendSearch() {
+    setActiveView("friends");
+    window.setTimeout(() => {
+      document.querySelector("[data-friend-search]")?.focus();
+    }, 0);
+  }
+
+  function handleOpenDirectConversation(conversation) {
+    setSocialError("");
+    setMessageError("");
+    setSendError("");
+    setSelectedDirectConversation(conversation);
+    setDirectVoiceConversation(null);
+    setMessages([]);
+    setReplyToMessage(null);
+    setEditingMessageId(null);
+    setActiveView("friends");
+  }
+
+  async function handleStartDirectChat(friendUserId) {
+    setSocialError("");
+    setMessageError("");
+    setSendError("");
+
+    try {
+      const conversation = await directApi.getOrCreateConversation(friendUserId);
+      setSelectedDirectConversation(conversation);
+      setDirectVoiceConversation(null);
+      setMessages([]);
+      setReplyToMessage(null);
+      setEditingMessageId(null);
+      setDirectConversations((current) => {
+        const withoutCurrent = current.filter((item) => item.id !== conversation.id);
+        return [conversation, ...withoutCurrent];
+      });
+      setActiveView("friends");
+    } catch (error) {
+      setSocialError(error.message);
+      setMessageError(error.message);
+      throw error;
+    }
+  }
+
+  async function handleStartDirectCall(friendUserId) {
+    setSocialError("");
+    setMessageError("");
+    setSendError("");
+
+    try {
+      const conversation = await directApi.getOrCreateConversation(friendUserId);
+      setSelectedDirectConversation(conversation);
+      setDirectVoiceConversation(conversation);
+      setMessages([]);
+      setReplyToMessage(null);
+      setEditingMessageId(null);
+      setDirectConversations((current) => {
+        const withoutCurrent = current.filter((item) => item.id !== conversation.id);
+        return [conversation, ...withoutCurrent];
+      });
+      setActiveView("friends");
+    } catch (error) {
+      setSocialError(error.message);
+      setMessageError(error.message);
+      throw error;
+    }
   }
 
   async function handleSaveEditedMessage(message, draft) {
@@ -620,6 +1095,12 @@ function ChatPage({
       return;
     }
 
+    if (relatedEntityType === "directconversation" && notification.relatedEntityId) {
+      await refreshDirectConversations(notification.relatedEntityId);
+      setActiveView("friends");
+      return;
+    }
+
     if (relatedEntityType === "channel" && notification.relatedEntityId) {
       const targetChannelId = notification.relatedEntityId;
 
@@ -686,13 +1167,20 @@ function ChatPage({
 
   async function handleTypingChange(channelId, isTyping) {
     try {
-      await chatSignalR.sendTyping(channelId, isTyping);
+      if (selectedDirectConversation) {
+        await chatSignalR.sendDirectTyping(selectedDirectConversation.id, isTyping);
+      } else {
+        await chatSignalR.sendTyping(channelId, isTyping);
+      }
     } catch (error) {
       console.warn("Failed to emit typing state.", error);
     }
   }
 
   const hasNoServers = !isServersLoading && servers.length === 0;
+  const shouldShowFriendsHome = activeView === "friends" && !currentDirectChannel;
+  const shouldShowVoiceWorkspace = activeView === "voice" || Boolean(directVoiceConversation);
+  const shouldKeepVoiceSession = isVoiceSessionActive || Boolean(directVoiceConversation);
 
   return (
     <>
@@ -703,17 +1191,10 @@ function ChatPage({
             selectedServerId={selectedServerId}
             activeView={activeView}
             currentUser={currentUser}
-            onSelectServer={setSelectedServerId}
-            onSelectView={setActiveView}
+            onSelectServer={handleSelectServer}
             onOpenCreateServer={() => setIsCreateServerVisible(true)}
             onOpenJoinServer={() => setIsJoinServerVisible(true)}
             onOpenProfile={() => setActiveView("profile")}
-          />
-          <NavRail
-            activeView={activeView}
-            unreadNotificationCount={unreadNotificationCount}
-            canSeeAdmin={canSeeAdmin}
-            onSelectView={setActiveView}
             onLogout={onLogout}
           />
         </div>
@@ -723,10 +1204,19 @@ function ChatPage({
             activeView={activeView}
             server={selectedServer}
             selectedTextChannelId={selectedTextChannelId}
-            activeVoiceChannelId={activeVoiceChannelId}
+            activeVoiceChannelId={isVoiceSessionActive ? activeVoiceChannelId : null}
             connectionState={connectionState}
             onSelectChannel={handleSelectChannel}
+            canOpenServerSettings={canSeeAdmin}
+            onOpenServerSettings={() => setActiveView("admin")}
+            canManageChannels={permissions.has("ManageChannels")}
+            onCreateChannel={openCreateChannelDialog}
+            onEditChannel={openEditChannelDialog}
+            voiceParticipants={voiceParticipants}
+            currentUserId={currentUser.id}
             friends={friends}
+            directConversations={directConversations}
+            selectedDirectConversationId={selectedDirectConversation?.id ?? null}
             friendRequests={friendRequests}
             searchTerm={searchTerm}
             searchResults={searchResults}
@@ -745,6 +1235,9 @@ function ChatPage({
             onUnfriend={(friendUserId) =>
               handleUnfriend(friendUserId).catch((error) => setSocialError(error.message))
             }
+            onOpenDirectConversation={handleOpenDirectConversation}
+            onStartDirectChat={handleStartDirectChat}
+            onStartDirectCall={handleStartDirectCall}
             onViewProfile={(userId) =>
               handleViewUserProfile(userId).catch((error) => setSocialError(error.message))
             }
@@ -762,7 +1255,37 @@ function ChatPage({
         </div>
 
         <div className="chat-stage">
-          {hasNoServers ? (
+          {shouldKeepVoiceSession && (
+            <VoicePanel
+              currentUser={currentUser}
+              currentChannel={currentVoiceTarget}
+              autoJoin
+              hidden={!shouldShowVoiceWorkspace}
+              onClose={() => {
+                setDirectVoiceConversation(null);
+                setIsVoiceSessionActive(false);
+                setActiveView("chat");
+                setVoiceParticipants([]);
+              }}
+              onParticipantsChange={(participants, channel) => {
+                setVoiceParticipants(channel?.isDirect ? [] : participants);
+              }}
+            />
+          )}
+          {!shouldShowVoiceWorkspace && shouldShowFriendsHome ? (
+            <FriendsHomePanel
+              friends={friends}
+              friendRequests={friendRequests}
+              searchTerm={searchTerm}
+              onSearchTermChange={setSearchTerm}
+              onFocusSearch={handleFocusFriendSearch}
+              onStartDirectChat={(friendUserId) => handleStartDirectChat(friendUserId).catch((error) => setSocialError(error.message))}
+              onStartDirectCall={(friendUserId) => handleStartDirectCall(friendUserId).catch((error) => setSocialError(error.message))}
+              onAcceptRequest={(requestId) => handleAcceptRequest(requestId).catch((error) => setSocialError(error.message))}
+              onRejectRequest={(requestId) => handleRejectRequest(requestId).catch((error) => setSocialError(error.message))}
+              onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+            />
+          ) : !shouldShowVoiceWorkspace && hasNoServers && !currentDirectChannel ? (
             <section className="chat-panel empty-state-shell">
               <div className="empty-state-card">
                 <p className="eyebrow">{t("workspace.freshWorkspace")}</p>
@@ -802,11 +1325,11 @@ function ChatPage({
                 </form>
               </div>
             </section>
-          ) : (
+          ) : !shouldShowVoiceWorkspace ? (
             <ChatBox
               currentUser={currentUser}
-              currentServer={selectedServer}
-              currentChannel={currentTextChannel}
+              currentServer={currentChatServer}
+              currentChannel={currentChatChannel}
               messages={messages}
               isLoading={isMessagesLoading}
               error={messageError || serversError}
@@ -814,8 +1337,8 @@ function ChatPage({
               replyToMessage={replyToMessage}
               editingMessageId={editingMessageId}
               typingUsers={typingUsers}
-              canManageMessages={permissions.has("ManageMessages")}
-              canPinMessages={permissions.has("PinMessages")}
+              canManageMessages={!currentDirectChannel && permissions.has("ManageMessages")}
+              canPinMessages={Boolean(currentDirectChannel) || permissions.has("PinMessages")}
               onCancelReply={() => setReplyToMessage(null)}
               onSendMessage={handleSendMessage}
               onTypingChange={handleTypingChange}
@@ -827,14 +1350,55 @@ function ChatPage({
               onTogglePinMessage={handleTogglePin}
               onToggleReaction={handleToggleReaction}
               onViewUserProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+              unreadNotificationCount={unreadNotificationCount}
+              onOpenNotifications={() => setActiveView("notifications")}
+              onOpenFriends={() => setActiveView("friends")}
             />
-          )}
+          ) : null}
         </div>
 
-        <WorkspaceRail
-          server={selectedServer}
-          onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
-        />
+        {directPeer ? (
+          <aside className="workspace-rail direct-context-rail">
+            <div className="direct-profile-card">
+              <div className="direct-profile-avatar">
+                {directPeer.avatarUrl ? (
+                  <img src={toAssetUrl(directPeer.avatarUrl)} alt={directPeer.displayName} className="avatar-image" />
+                ) : (
+                  <span>{directPeer.displayName?.[0]?.toUpperCase() || directPeer.userName?.[0]?.toUpperCase() || "U"}</span>
+                )}
+              </div>
+              <h3>{directPeer.displayName}</h3>
+              <p>@{directPeer.userName}</p>
+              <button
+                type="button"
+                className="primary-button compact"
+                onClick={() => handleStartDirectCall(directPeer.id).catch((error) => setSocialError(error.message))}
+              >
+                {t("friends.call")}
+              </button>
+              <button
+                type="button"
+                className="ghost-button compact"
+                onClick={() => handleViewUserProfile(directPeer.id).catch((error) => setSocialError(error.message))}
+              >
+                {t("friends.viewProfile")}
+              </button>
+            </div>
+          </aside>
+        ) : activeView === "friends" ? (
+          <aside className="workspace-rail direct-context-rail">
+            <div className="direct-profile-card muted-card">
+              <p className="eyebrow">{t("friends.homeEyebrow")}</p>
+              <h3>{t("friends.homeTitle")}</h3>
+              <p>{t("friends.homeBody")}</p>
+            </div>
+          </aside>
+        ) : (
+          <WorkspaceRail
+            server={selectedServer}
+            onViewProfile={(userId) => handleViewUserProfile(userId).catch((error) => setSocialError(error.message))}
+          />
+        )}
       </main>
 
       {isCreateServerVisible && (
@@ -899,6 +1463,95 @@ function ChatPage({
         </ModalShell>
       )}
 
+      {channelDialog && (
+        <ModalShell
+          title={channelDialog.mode === "create" ? t("admin.createChannel") : t("admin.editChannel")}
+          subtitle={selectedServer?.name}
+          onClose={() => setChannelDialog(null)}
+        >
+          <form
+            className="channel-dialog-form"
+            onSubmit={(event) => {
+              handleSaveChannelDialog(event).catch((error) => setServersError(error.message));
+            }}
+          >
+            <label>
+              {t("admin.channelName")}
+              <input
+                type="text"
+                value={channelForm.name}
+                onChange={(event) => setChannelForm((current) => ({ ...current, name: event.target.value }))}
+                required
+              />
+            </label>
+
+            <label>
+              {t("admin.type")}
+              <select
+                value={channelForm.type}
+                onChange={(event) => setChannelForm((current) => ({ ...current, type: event.target.value }))}
+                disabled={channelDialog.mode === "edit"}
+              >
+                <option value="Text">{t("channel.textType")}</option>
+                <option value="Voice">{t("channel.voiceType")}</option>
+              </select>
+            </label>
+
+            <label>
+              {t("admin.category")}
+              <select
+                value={channelForm.categoryId}
+                onChange={(event) => setChannelForm((current) => ({ ...current, categoryId: event.target.value }))}
+              >
+                <option value="">{t("admin.noCategory")}</option>
+                {selectedServer?.categories?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              {t("admin.topic")}
+              <input
+                type="text"
+                value={channelForm.topic}
+                onChange={(event) => setChannelForm((current) => ({ ...current, topic: event.target.value }))}
+              />
+            </label>
+
+            <label>
+              {t("admin.position")}
+              <input
+                type="number"
+                value={channelForm.position}
+                onChange={(event) => setChannelForm((current) => ({ ...current, position: event.target.value }))}
+                required
+              />
+            </label>
+
+            <div className="inline-actions">
+              <button type="submit" className="primary-button">
+                {channelDialog.mode === "create" ? t("common.create") : t("common.save")}
+              </button>
+              {channelDialog.mode === "edit" && (
+                <button
+                  type="button"
+                  className="ghost-button danger"
+                  onClick={() => handleDeleteChannelFromDialog().catch((error) => setServersError(error.message))}
+                >
+                  {t("common.delete")}
+                </button>
+              )}
+              <button type="button" className="ghost-button" onClick={() => setChannelDialog(null)}>
+                {t("common.cancel")}
+              </button>
+            </div>
+          </form>
+        </ModalShell>
+      )}
+
       {isUserProfileVisible && (
         <UserProfileModal
           profile={selectedUserProfile}
@@ -931,6 +1584,11 @@ function ChatPage({
             onUpdateServer={async (serverId, payload) => {
               await serverApi.updateServer(serverId, payload);
               await refreshSelectedServer(serverId);
+            }}
+            onUploadServerIcon={async (serverId, file) => {
+              await serverApi.uploadIcon(serverId, file);
+              await refreshSelectedServer(serverId);
+              await refreshServers(serverId);
             }}
             onDeleteServer={async (serverId) => {
               await serverApi.deleteServer(serverId);
@@ -974,6 +1632,10 @@ function ChatPage({
               await serverApi.assignRole(serverId, roleId, userId);
               await refreshSelectedServer(serverId);
             }}
+            onRemoveRole={async (serverId, roleId, userId) => {
+              await serverApi.removeRole(serverId, roleId, userId);
+              await refreshSelectedServer(serverId);
+            }}
             onKickMember={async (serverId, userId, reason) => {
               await serverApi.kickMember(serverId, userId, reason);
               await refreshSelectedServer(serverId);
@@ -986,11 +1648,6 @@ function ChatPage({
         </ModalShell>
       )}
 
-      {activeView === "voice" && (
-        <ModalShell wide bare onClose={() => setActiveView("chat")}>
-          <VoicePanel currentUser={currentUser} currentChannel={currentVoiceChannel} />
-        </ModalShell>
-      )}
     </>
   );
 }

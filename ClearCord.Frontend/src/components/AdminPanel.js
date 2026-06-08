@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ModalShell from "./ModalShell";
 import { useI18n } from "../i18n";
+import { toAssetUrl } from "../services/api";
 
 const PERMISSION_OPTIONS = [
   "ViewChannels",
@@ -126,22 +127,24 @@ function InlineChannelEditor({
         }
         required
       />
-      <select
-        value={form.categoryId}
-        onChange={(event) =>
-          setForm((current) => ({
-            ...current,
-            categoryId: event.target.value
-          }))
-        }
-      >
-        <option value="">{t("admin.noCategory")}</option>
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </select>
+      {categories.length > 0 && (
+        <select
+          value={form.categoryId}
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              categoryId: event.target.value
+            }))
+          }
+        >
+          <option value="">{t("admin.noCategory")}</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+      )}
       <input
         type="text"
         value={form.topic}
@@ -187,6 +190,7 @@ function AdminPanel({
   invite,
   permissions,
   onUpdateServer,
+  onUploadServerIcon,
   onDeleteServer,
   onLeaveServer,
   onCreateCategory,
@@ -197,6 +201,7 @@ function AdminPanel({
   onDeleteChannel,
   onCreateRole,
   onAssignRole,
+  onRemoveRole,
   onKickMember,
   onBanMember
 }) {
@@ -220,10 +225,6 @@ function AdminPanel({
     colorHex: "#49C6B4",
     permissions: ["ViewChannels", "SendMessages", "ConnectToVoice"],
     isDefault: false
-  });
-  const [assignmentTarget, setAssignmentTarget] = useState({
-    userId: "",
-    roleId: ""
   });
   const [serverAction, setServerAction] = useState(null);
   const [moderationDialog, setModerationDialog] = useState(null);
@@ -254,18 +255,43 @@ function AdminPanel({
       topic: "",
       position: (server?.channels?.length || 0) + 1
     });
-    setAssignmentTarget({
-      userId: "",
-      roleId: ""
-    });
   }, [server?.channels?.length, server?.categories?.length, server?.description, server?.name]);
 
   const sortedMembers = useMemo(
     () => [...(server?.members || [])].sort((left, right) => left.displayName.localeCompare(right.displayName)),
     [server?.members]
   );
+  const customCategories = useMemo(
+    () => (server?.categories || []).filter((category) => category.name.trim().toLowerCase() !== "lobby"),
+    [server?.categories]
+  );
+  const textChannels = useMemo(
+    () =>
+      [...(server?.channels || [])]
+        .filter((channel) => channel.type === "Text")
+        .sort((left, right) => left.position - right.position),
+    [server?.channels]
+  );
+  const voiceChannels = useMemo(
+    () =>
+      [...(server?.channels || [])]
+        .filter((channel) => channel.type === "Voice")
+        .sort((left, right) => left.position - right.position),
+    [server?.channels]
+  );
+
+  const serverInitials = useMemo(() => {
+    if (!server?.name) return "S";
+    return server.name
+      .split(" ")
+      .slice(0, 2)
+      .map((chunk) => chunk[0])
+      .join("")
+      .toUpperCase();
+  }, [server?.name]);
 
   const permissionLabel = (permission) => t(`permissions.${permission}`);
+  const memberHasRole = (member, roleId) => member.roles.some((role) => role.id === roleId);
 
   if (!server) {
     return (
@@ -316,6 +342,41 @@ function AdminPanel({
           <div className="section-heading">
             <h3>{t("admin.serverSettings")}</h3>
             <span className="mini-pill">{server.members.length} {t("common.members").toLowerCase()}</span>
+          </div>
+
+          <div className="profile-hero" style={{ marginBottom: "1.5rem", gap: "1.5rem", alignItems: "center" }}>
+            <div className="profile-avatar-large" style={{ width: "80px", height: "80px", fontSize: "2rem" }}>
+              {server.iconUrl ? (
+                <img
+                  src={toAssetUrl(server.iconUrl)}
+                  alt={server.name}
+                  className="avatar-image"
+                />
+              ) : (
+                <span>{serverInitials}</span>
+              )}
+            </div>
+            {canManageServer && (
+              <label className="file-upload-button profile-upload" style={{ margin: 0 }}>
+                {t("profile.uploadAvatar") || "Upload Icon"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) {
+                      return;
+                    }
+
+                    runAction(async () => {
+                      await onUploadServerIcon(server.id, file);
+                      setSuccess(t("admin.iconUpdated") || "Server icon updated successfully.");
+                    });
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            )}
           </div>
 
           <label>
@@ -384,11 +445,11 @@ function AdminPanel({
         <div className="feature-card">
           <div className="section-heading">
             <h3>{t("admin.categories")}</h3>
-            <span className="mini-pill">{server.categories.length}</span>
+            <span className="mini-pill">{customCategories.length}</span>
           </div>
 
           <div className="list-stack">
-            {server.categories.map((category) => (
+            {customCategories.map((category) => (
               <InlineCategoryEditor
                 key={category.id}
                 category={category}
@@ -406,10 +467,11 @@ function AdminPanel({
                 }
               />
             ))}
+            {customCategories.length === 0 && <p className="muted-copy">{t("admin.noCustomCategories")}</p>}
           </div>
 
           <form
-            className="admin-inline-grid"
+            className="admin-category-form"
             onSubmit={(event) => {
               event.preventDefault();
               runAction(async () => {
@@ -419,7 +481,7 @@ function AdminPanel({
                 });
                 setNewCategory({
                   name: "",
-                  position: server.categories.length + 2
+                  position: customCategories.length + 1
                 });
                 setSuccess(t("admin.categoryCreated"));
               });
@@ -462,26 +524,64 @@ function AdminPanel({
             <span className="mini-pill">{server.channels.length}</span>
           </div>
 
-          <div className="list-stack">
-            {server.channels.map((channel) => (
-              <InlineChannelEditor
-                key={channel.id}
-                channel={channel}
-                categories={server.categories}
-                onSave={(channelId, payload) =>
-                  runAction(async () => {
-                    await onUpdateChannel(channelId, payload);
-                    setSuccess(t("admin.channelUpdated"));
-                  })
-                }
-                onDelete={(channelId) =>
-                  runAction(async () => {
-                    await onDeleteChannel(channelId);
-                    setSuccess(t("admin.channelDeleted"));
-                  })
-                }
-              />
-            ))}
+          <div className="admin-channel-groups">
+            <section className="admin-channel-group">
+              <header className="admin-channel-group-header">
+                <h4>{t("workspace.textChannels")}</h4>
+                <span className="mini-pill">{textChannels.length}</span>
+              </header>
+              <div className="list-stack">
+                {textChannels.map((channel) => (
+                  <InlineChannelEditor
+                    key={channel.id}
+                    channel={channel}
+                    categories={customCategories}
+                    onSave={(channelId, payload) =>
+                      runAction(async () => {
+                        await onUpdateChannel(channelId, payload);
+                        setSuccess(t("admin.channelUpdated"));
+                      })
+                    }
+                    onDelete={(channelId) =>
+                      runAction(async () => {
+                        await onDeleteChannel(channelId);
+                        setSuccess(t("admin.channelDeleted"));
+                      })
+                    }
+                  />
+                ))}
+                {textChannels.length === 0 && <p className="muted-copy">{t("admin.noTextChannels")}</p>}
+              </div>
+            </section>
+
+            <section className="admin-channel-group">
+              <header className="admin-channel-group-header">
+                <h4>{t("workspace.voiceChannels")}</h4>
+                <span className="mini-pill">{voiceChannels.length}</span>
+              </header>
+              <div className="list-stack">
+                {voiceChannels.map((channel) => (
+                  <InlineChannelEditor
+                    key={channel.id}
+                    channel={channel}
+                    categories={customCategories}
+                    onSave={(channelId, payload) =>
+                      runAction(async () => {
+                        await onUpdateChannel(channelId, payload);
+                        setSuccess(t("admin.channelUpdated"));
+                      })
+                    }
+                    onDelete={(channelId) =>
+                      runAction(async () => {
+                        await onDeleteChannel(channelId);
+                        setSuccess(t("admin.channelDeleted"));
+                      })
+                    }
+                  />
+                ))}
+                {voiceChannels.length === 0 && <p className="muted-copy">{t("admin.noVoiceChannels")}</p>}
+              </div>
+            </section>
           </div>
 
           <form
@@ -540,26 +640,28 @@ function AdminPanel({
               </select>
             </label>
 
-            <label>
-              {t("admin.category")}
-              <select
-                value={newChannel.categoryId}
-                onChange={(event) =>
-                  setNewChannel((current) => ({
-                    ...current,
-                    categoryId: event.target.value
-                  }))
-                }
-                disabled={!canManageChannels}
-              >
-                <option value="">{t("admin.noCategory")}</option>
-                {server.categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {customCategories.length > 0 && (
+              <label>
+                {t("admin.category")}
+                <select
+                  value={newChannel.categoryId}
+                  onChange={(event) =>
+                    setNewChannel((current) => ({
+                      ...current,
+                      categoryId: event.target.value
+                    }))
+                  }
+                  disabled={!canManageChannels}
+                >
+                  <option value="">{t("admin.noCategory")}</option>
+                  {customCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label>
               {t("admin.topic")}
@@ -708,57 +810,7 @@ function AdminPanel({
             <span className="mini-pill">{server.members.length}</span>
           </div>
 
-          <div className="member-management-bar">
-            <select
-              value={assignmentTarget.userId}
-              onChange={(event) =>
-                setAssignmentTarget((current) => ({
-                  ...current,
-                  userId: event.target.value
-                }))
-              }
-              disabled={!canManageRoles}
-            >
-              <option value="">{t("admin.selectMember")}</option>
-              {sortedMembers.map((member) => (
-                <option key={member.userId} value={member.userId}>
-                  {member.displayName}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={assignmentTarget.roleId}
-              onChange={(event) =>
-                setAssignmentTarget((current) => ({
-                  ...current,
-                  roleId: event.target.value
-                }))
-              }
-              disabled={!canManageRoles}
-            >
-              <option value="">{t("admin.selectRole")}</option>
-              {server.roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              className="primary-button compact"
-              disabled={!canManageRoles || !assignmentTarget.userId || !assignmentTarget.roleId}
-              onClick={() =>
-                runAction(async () => {
-                  await onAssignRole(server.id, assignmentTarget.roleId, assignmentTarget.userId);
-                  setSuccess(t("admin.roleAssigned"));
-                })
-              }
-            >
-              {t("admin.assignRole")}
-            </button>
-          </div>
+          <p className="muted-copy">{t("admin.roleEditorHint")}</p>
 
           <div className="list-stack">
             {sortedMembers.map((member) => (
@@ -766,10 +818,35 @@ function AdminPanel({
                 <div>
                   <strong>{member.displayName}</strong>
                   <p>@{member.userName}</p>
-                  <div className="inline-actions wrap">
-                    {member.roles.map((role) => (
-                      <RoleBadge key={role.id} role={role} />
-                    ))}
+                  <div className="member-role-toggle-list">
+                    {server.roles.map((role) => {
+                      const isAssigned = memberHasRole(member, role.id);
+                      const isLocked = role.isDefault || role.isSystemRole;
+
+                      return (
+                        <label key={role.id} className={`role-toggle ${isAssigned ? "active" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={isAssigned}
+                            disabled={!canManageRoles || isLocked}
+                            onChange={(event) =>
+                              runAction(async () => {
+                                if (event.target.checked) {
+                                  await onAssignRole(server.id, role.id, member.userId);
+                                  setSuccess(t("admin.roleUpdated"));
+                                } else {
+                                  await onRemoveRole(server.id, role.id, member.userId);
+                                  setSuccess(t("admin.roleUpdated"));
+                                }
+                              })
+                            }
+                          />
+                          <span style={{ borderColor: role.colorHex, color: role.colorHex }}>
+                            {role.name}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 

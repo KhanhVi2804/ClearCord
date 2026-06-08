@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { toAssetUrl } from "../services/api";
 import { useI18n } from "../i18n";
 
-function MemberRow({ member, onViewProfile, statusLabel }) {
+function MemberRow({ member, onViewProfile }) {
   const topRole = member.roles?.[0];
 
   return (
@@ -16,11 +16,7 @@ function MemberRow({ member, onViewProfile, statusLabel }) {
         <span className={`presence-dot ${member.isOnline ? "online" : "offline"}`} />
       </div>
       <span className="member-row-name">{member.nickname || member.displayName}</span>
-      {topRole ? (
-        <span className="role-badge subtle" style={{ color: topRole.colorHex }}>
-          {topRole.name}
-        </span>
-      ) : null}
+      {topRole ? <span className="member-role-dot" style={{ background: topRole.colorHex }} /> : null}
     </button>
   );
 }
@@ -28,16 +24,29 @@ function MemberRow({ member, onViewProfile, statusLabel }) {
 function WorkspaceRail({ server, onViewProfile }) {
   const { t } = useI18n();
 
-  const { online, offline } = useMemo(() => {
+  const { online, offline, roleGroups } = useMemo(() => {
     const members = [...(server?.members ?? [])].sort((left, right) =>
       (left.nickname || left.displayName).localeCompare(right.nickname || right.displayName)
     );
+    const onlineMembers = members.filter((member) => member.isOnline);
+    const grouped = new Map();
+
+    onlineMembers.forEach((member) => {
+      const role = member.roles?.[0];
+      const groupName = role?.name || t("common.online");
+      const groupColor = role?.colorHex || "#23a559";
+      const group = grouped.get(groupName) || { name: groupName, color: groupColor, members: [] };
+
+      group.members.push(member);
+      grouped.set(groupName, group);
+    });
 
     return {
-      online: members.filter((member) => member.isOnline),
-      offline: members.filter((member) => !member.isOnline)
+      online: onlineMembers,
+      offline: members.filter((member) => !member.isOnline),
+      roleGroups: Array.from(grouped.values())
     };
-  }, [server?.members]);
+  }, [server?.members, t]);
 
   return (
     <aside className="workspace-rail">
@@ -55,37 +64,28 @@ function WorkspaceRail({ server, onViewProfile }) {
           </header>
 
           <div className="member-groups">
-            {online.length > 0 && (
-              <section className="member-group">
+            {roleGroups.map((group) => (
+              <section className="member-group" key={group.name}>
                 <h4>
-                  {t("common.online")} — {online.length}
+                  <span className="member-group-color" style={{ background: group.color }} />
+                  {group.name} - {group.members.length}
                 </h4>
                 <div className="member-list-compact">
-                  {online.map((member) => (
-                    <MemberRow
-                      key={member.userId}
-                      member={member}
-                      onViewProfile={onViewProfile}
-                      statusLabel={t("common.online")}
-                    />
+                  {group.members.map((member) => (
+                    <MemberRow key={member.userId} member={member} onViewProfile={onViewProfile} />
                   ))}
                 </div>
               </section>
-            )}
+            ))}
 
             {offline.length > 0 && (
               <section className="member-group">
                 <h4>
-                  {t("common.offline")} — {offline.length}
+                  {t("common.offline")} - {offline.length}
                 </h4>
                 <div className="member-list-compact">
                   {offline.map((member) => (
-                    <MemberRow
-                      key={member.userId}
-                      member={member}
-                      onViewProfile={onViewProfile}
-                      statusLabel={t("common.offline")}
-                    />
+                    <MemberRow key={member.userId} member={member} onViewProfile={onViewProfile} />
                   ))}
                 </div>
               </section>

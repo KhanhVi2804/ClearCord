@@ -230,6 +230,18 @@ export const serverApi = {
     const response = await api.put(`/api/servers/${serverId}`, payload);
     return response.data;
   },
+  async uploadIcon(serverId, file) {
+    const formData = new FormData();
+    formData.append("icon", file);
+
+    const response = await api.post(`/api/servers/${serverId}/icon`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    });
+
+    return response.data;
+  },
   async deleteServer(serverId) {
     await api.delete(`/api/servers/${serverId}`);
   },
@@ -258,6 +270,9 @@ export const serverApi = {
     await api.post(`/api/servers/${serverId}/roles/${roleId}/assign`, {
       userId
     });
+  },
+  async removeRole(serverId, roleId, userId) {
+    await api.delete(`/api/servers/${serverId}/roles/${roleId}/assignments/${userId}`);
   },
   async kickMember(serverId, userId, reason) {
     await api.post(`/api/servers/${serverId}/members/${userId}/kick`, {
@@ -340,6 +355,46 @@ export const messageApi = {
   async removeReaction(messageId, emoji) {
     const encodedEmoji = encodeURIComponent(emoji);
     const response = await api.delete(`/api/messages/${messageId}/reactions/${encodedEmoji}`);
+    return response.data;
+  }
+};
+
+export const directApi = {
+  async getConversations() {
+    const response = await api.get("/api/direct-conversations");
+    return response.data;
+  },
+  async getOrCreateConversation(targetUserId) {
+    const response = await api.post("/api/direct-conversations", {
+      targetUserId
+    });
+    return response.data;
+  },
+  async getMessages(conversationId) {
+    const response = await api.get(`/api/direct-conversations/${conversationId}/messages`, {
+      params: {
+        page: 1,
+        pageSize: 100
+      }
+    });
+
+    return response.data;
+  },
+  async createMessageWithFiles(conversationId, payload) {
+    const response = await api.post(
+      `/api/direct-conversations/${conversationId}/messages`,
+      buildMessageFormData(payload),
+      {
+        headers: {
+          "Content-Type": "multipart/form-data"
+        }
+      }
+    );
+
+    return response.data;
+  },
+  async getVoiceParticipants(conversationId) {
+    const response = await api.get(`/api/direct-conversations/${conversationId}/voice/participants`);
     return response.data;
   }
 };

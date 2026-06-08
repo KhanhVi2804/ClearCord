@@ -63,6 +63,17 @@ public static class MappingExtensions
             otherUser.IsOnline);
     }
 
+    public static DirectConversationDto ToDirectConversationDto(this DirectConversation conversation, string currentUserId)
+    {
+        var otherUser = conversation.UserAId == currentUserId ? conversation.UserB : conversation.UserA;
+
+        return new DirectConversationDto(
+            conversation.Id,
+            otherUser.ToUserSummaryDto(),
+            conversation.CreatedAt,
+            conversation.LastActivityAt);
+    }
+
     public static ServerRoleDto ToServerRoleDto(this ServerRole role)
     {
         return new ServerRoleDto(
@@ -141,6 +152,7 @@ public static class MappingExtensions
         return new MessageDto(
             message.Id,
             message.ChannelId,
+            message.DirectConversationId,
             message.Content,
             message.IsEdited,
             message.IsDeleted,
@@ -179,6 +191,20 @@ public static class MappingExtensions
     }
 
     public static VoiceParticipantDto ToVoiceParticipantDto(this VoiceChannelParticipant participant)
+    {
+        return new VoiceParticipantDto(
+            participant.UserId,
+            participant.User.UserName ?? string.Empty,
+            participant.User.DisplayName,
+            participant.User.AvatarUrl,
+            participant.ConnectionId,
+            participant.IsMuted,
+            participant.IsCameraEnabled,
+            participant.IsScreenSharing,
+            participant.JoinedAt);
+    }
+
+    public static VoiceParticipantDto ToVoiceParticipantDto(this DirectVoiceParticipant participant)
     {
         return new VoiceParticipantDto(
             participant.UserId,

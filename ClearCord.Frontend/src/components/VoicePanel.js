@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toAssetUrl, voiceApi } from "../services/api";
+import { directApi, toAssetUrl, voiceApi } from "../services/api";
 import { chatSignalR } from "../services/signalr";
 import { useI18n } from "../i18n";
 
@@ -54,7 +54,12 @@ function MediaTile({ title, subtitle, stream, avatarUrl, isLocal }) {
 
 function VoicePanel({
   currentUser,
-  currentChannel
+  currentChannel,
+  autoJoin = false,
+  compact = false,
+  hidden = false,
+  onClose,
+  onParticipantsChange
 }) {
   const { t } = useI18n();
   const [participants, setParticipants] = useState([]);
@@ -70,16 +75,23 @@ function VoicePanel({
   const peerConnectionsRef = useRef(new Map());
   const screenStreamRef = useRef(null);
   const channelIdRef = useRef(currentChannel?.id ?? null);
+  const isDirectRef = useRef(Boolean(currentChannel?.isDirect));
   const previousChannelIdRef = useRef(currentChannel?.id ?? null);
   const isJoinedRef = useRef(false);
+  const autoJoinChannelIdRef = useRef(null);
 
   useEffect(() => {
     channelIdRef.current = currentChannel?.id ?? null;
-  }, [currentChannel?.id]);
+    isDirectRef.current = Boolean(currentChannel?.isDirect);
+  }, [currentChannel?.id, currentChannel?.isDirect]);
 
   useEffect(() => {
     isJoinedRef.current = isJoined;
   }, [isJoined]);
+
+  useEffect(() => {
+    onParticipantsChange?.(participants, currentChannel);
+  }, [currentChannel, onParticipantsChange, participants]);
 
   const remoteTiles = useMemo(
     () =>
@@ -101,7 +113,9 @@ function VoicePanel({
 
     async function loadParticipants() {
       try {
-        const nextParticipants = await voiceApi.getParticipants(currentChannel.id);
+        const nextParticipants = currentChannel.isDirect
+          ? await directApi.getVoiceParticipants(currentChannel.id)
+          : await voiceApi.getParticipants(currentChannel.id);
         if (isMounted) {
           setParticipants(nextParticipants);
         }
@@ -121,11 +135,21 @@ function VoicePanel({
 
   useEffect(() => {
     const unsubscribeParticipants = chatSignalR.onVoiceParticipantsUpdated((payload) => {
-      setParticipants(payload);
+      const matchesTarget = isDirectRef.current
+        ? payload.directConversationId === channelIdRef.current
+        : payload.channelId === channelIdRef.current;
+
+      if (matchesTarget || (!payload.channelId && !payload.directConversationId)) {
+        setParticipants(payload.participants ?? payload);
+      }
     });
 
     const unsubscribeSignals = chatSignalR.onWebRtcSignal((signal) => {
-      if (signal.channelId !== channelIdRef.current) {
+      const matchesTarget = isDirectRef.current
+        ? signal.directConversationId === channelIdRef.current
+        : signal.channelId === channelIdRef.current;
+
+      if (!matchesTarget) {
         return;
       }
 
@@ -143,6 +167,7 @@ function VoicePanel({
     previousChannelIdRef.current = currentChannel?.id ?? null;
 
     if (previousChannelId && previousChannelId !== currentChannel?.id) {
+      autoJoinChannelIdRef.current = null;
       leaveVoiceChannel();
     }
   }, [currentChannel?.id]);
@@ -150,8 +175,18 @@ function VoicePanel({
   useEffect(() => {
     return () => {
       leaveVoiceChannel();
+      onParticipantsChange?.([], currentChannel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!autoJoin || !currentChannel || autoJoinChannelIdRef.current === currentChannel.id) {
+      return;
+    }
+
+    autoJoinChannelIdRef.current = currentChannel.id;
+    joinVoiceChannel();
+  }, [autoJoin, currentChannel?.id]);
 
   useEffect(() => {
     if (!isJoined) {
@@ -180,7 +215,8 @@ function VoicePanel({
 
     if (nextScreenSharing) {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true
+        video: true,
+        audio: true
       });
 
       screenStreamRef.current = screenStream;
@@ -191,7 +227,12 @@ function VoicePanel({
           handleToggleScreenShare(false);
         };
       }
-    } else if (nextCameraEnabled) {
+    } else {
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
+
+    if (!nextScreenSharing && nextCameraEnabled) {
       const cameraStream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: true
@@ -218,7 +259,8 @@ function VoicePanel({
     const audioTrack = stream.getAudioTracks()[0] ?? null;
     const videoTrack = stream.getVideoTracks()[0] ?? null;
 
-    for (const connection of peerConnectionsRef.current.values()) {
+    for (const [targetUserId, connection] of peerConnectionsRef.current.entries()) {
+      let shouldRenegotiate = false;
       const senders = connection.getSenders();
       const audioSender = senders.find((sender) => sender.track?.kind === "audio");
       const videoSender = senders.find((sender) => sender.track?.kind === "video");
@@ -227,12 +269,14 @@ function VoicePanel({
         await audioSender.replaceTrack(audioTrack);
       } else if (!audioSender && audioTrack) {
         connection.addTrack(audioTrack, stream);
+        shouldRenegotiate = true;
       }
 
       if (videoSender && videoTrack) {
         await videoSender.replaceTrack(videoTrack);
       } else if (!videoSender && videoTrack) {
         connection.addTrack(videoTrack, stream);
+        shouldRenegotiate = true;
       }
 
       if (audioSender && !audioTrack) {
@@ -241,6 +285,10 @@ function VoicePanel({
 
       if (videoSender && !videoTrack) {
         await videoSender.replaceTrack(null);
+      }
+
+      if (shouldRenegotiate) {
+        await renegotiatePeerConnection(targetUserId, connection);
       }
     }
   }
@@ -269,6 +317,39 @@ function VoicePanel({
     });
   }
 
+  async function sendWebRtcSignal(targetUserId, type, payload) {
+    if (!channelIdRef.current) {
+      return;
+    }
+
+    if (isDirectRef.current) {
+      await chatSignalR.sendDirectWebRtcSignal({
+        directConversationId: channelIdRef.current,
+        targetUserId,
+        type,
+        payload
+      });
+      return;
+    }
+
+    await chatSignalR.sendWebRtcSignal({
+      channelId: channelIdRef.current,
+      targetUserId,
+      type,
+      payload
+    });
+  }
+
+  async function updateCurrentVoiceState(nextState) {
+    if (!currentChannel) {
+      return [];
+    }
+
+    return currentChannel.isDirect
+      ? chatSignalR.updateDirectVoiceState(currentChannel.id, nextState)
+      : chatSignalR.updateVoiceState(currentChannel.id, nextState);
+  }
+
   function ensurePeerConnection(targetUserId) {
     if (peerConnectionsRef.current.has(targetUserId)) {
       return peerConnectionsRef.current.get(targetUserId);
@@ -285,12 +366,7 @@ function VoicePanel({
         return;
       }
 
-      chatSignalR.sendWebRtcSignal({
-        channelId: channelIdRef.current,
-        targetUserId,
-        type: "IceCandidate",
-        payload: JSON.stringify(event.candidate)
-      });
+      sendWebRtcSignal(targetUserId, "IceCandidate", JSON.stringify(event.candidate));
     };
 
     connection.ontrack = (event) => {
@@ -319,15 +395,18 @@ function VoicePanel({
 
   async function createOfferFor(targetUserId) {
     const connection = ensurePeerConnection(targetUserId);
+    await renegotiatePeerConnection(targetUserId, connection);
+  }
+
+  async function renegotiatePeerConnection(targetUserId, connection) {
+    if (connection.signalingState !== "stable") {
+      return;
+    }
+
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
 
-    await chatSignalR.sendWebRtcSignal({
-      channelId: channelIdRef.current,
-      targetUserId,
-      type: "Offer",
-      payload: JSON.stringify(offer)
-    });
+    await sendWebRtcSignal(targetUserId, "Offer", JSON.stringify(offer));
   }
 
   function shouldCreateOffer(remoteUserId) {
@@ -368,12 +447,7 @@ function VoicePanel({
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
 
-        await chatSignalR.sendWebRtcSignal({
-          channelId: channelIdRef.current,
-          targetUserId: signal.sourceUserId,
-          type: "Answer",
-          payload: JSON.stringify(answer)
-        });
+        await sendWebRtcSignal(signal.sourceUserId, "Answer", JSON.stringify(answer));
 
         return;
       }
@@ -415,11 +489,14 @@ function VoicePanel({
         isScreenSharing
       });
 
-      const nextParticipants = await chatSignalR.joinVoiceChannel(currentChannel.id, {
+      const voiceState = {
         isMuted,
         isCameraEnabled,
         isScreenSharing
-      });
+      };
+      const nextParticipants = currentChannel.isDirect
+        ? await chatSignalR.joinDirectVoice(currentChannel.id, voiceState)
+        : await chatSignalR.joinVoiceChannel(currentChannel.id, voiceState);
 
       setParticipants(nextParticipants);
       setIsJoined(true);
@@ -435,15 +512,14 @@ function VoicePanel({
     try {
       if (channelIdRef.current && isJoinedRef.current) {
         for (const userId of peerConnectionsRef.current.keys()) {
-          await chatSignalR.sendWebRtcSignal({
-            channelId: channelIdRef.current,
-            targetUserId: userId,
-            type: "Hangup",
-            payload: "{}"
-          });
+          await sendWebRtcSignal(userId, "Hangup", "{}");
         }
 
-        await chatSignalR.leaveVoiceChannel(channelIdRef.current);
+        if (isDirectRef.current) {
+          await chatSignalR.leaveDirectVoice(channelIdRef.current);
+        } else {
+          await chatSignalR.leaveVoiceChannel(channelIdRef.current);
+        }
       }
     } catch (requestError) {
       console.warn("Failed to leave voice channel cleanly.", requestError);
@@ -451,8 +527,14 @@ function VoicePanel({
       clearPeerConnections();
       cleanupLocalMedia();
       setRemoteStreams({});
+      setParticipants([]);
       setIsJoined(false);
     }
+  }
+
+  async function handleLeaveAndClose() {
+    await leaveVoiceChannel();
+    onClose?.();
   }
 
   async function handleToggleMute() {
@@ -463,7 +545,7 @@ function VoicePanel({
     });
 
     if (isJoined) {
-      await chatSignalR.updateVoiceState(currentChannel.id, {
+      await updateCurrentVoiceState({
         isMuted: nextMuted,
         isCameraEnabled,
         isScreenSharing
@@ -484,7 +566,7 @@ function VoicePanel({
       });
 
       if (isJoined) {
-        await chatSignalR.updateVoiceState(currentChannel.id, {
+        await updateCurrentVoiceState({
           isMuted,
           isCameraEnabled: nextCameraEnabled,
           isScreenSharing
@@ -510,7 +592,7 @@ function VoicePanel({
       });
 
       if (isJoined) {
-        await chatSignalR.updateVoiceState(currentChannel.id, {
+        await updateCurrentVoiceState({
           isMuted,
           isCameraEnabled,
           isScreenSharing: nextScreenSharing
@@ -524,10 +606,66 @@ function VoicePanel({
   }
 
   if (!currentChannel) {
-    return (
+    return compact ? null : (
       <section className="feature-panel">
         <div className="empty-panel">
           <p>{t("voice.empty")}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (hidden) {
+    return (
+      <section className="voice-hidden-media" aria-hidden="true">
+        {remoteTiles.map((participant) => (
+          <MediaTile
+            key={participant.userId}
+            title={participant.displayName}
+            subtitle=""
+            stream={participant.stream}
+            avatarUrl={participant.avatarUrl}
+          />
+        ))}
+      </section>
+    );
+  }
+
+  if (compact) {
+    return (
+      <section className="voice-compact-panel">
+        <div className="voice-compact-copy">
+          <span className="material-symbols-outlined">volume_up</span>
+          <div>
+            <strong>{currentChannel.name}</strong>
+            <p>
+              {error || (isBusy ? t("voice.joining") : t("voice.participants", { count: participants.length }))}
+            </p>
+          </div>
+        </div>
+
+        <div className="voice-compact-actions">
+          {!isJoined && (
+            <button type="button" onClick={joinVoiceChannel} disabled={isBusy} title={t("voice.joinCall")}>
+              <span className="material-symbols-outlined">call</span>
+            </button>
+          )}
+          <button type="button" onClick={handleToggleMute} disabled={isBusy || !isJoined} title={isMuted ? t("voice.unmute") : t("voice.mute")}>
+            <span className="material-symbols-outlined">{isMuted ? "mic_off" : "mic"}</span>
+          </button>
+          <button type="button" onClick={handleToggleCamera} disabled={isBusy || !isJoined} title={isCameraEnabled ? t("voice.turnCameraOff") : t("voice.turnCameraOn")}>
+            <span className="material-symbols-outlined">{isCameraEnabled ? "videocam" : "videocam_off"}</span>
+          </button>
+          <button
+            type="button"
+            className="danger"
+            onClick={() => {
+              handleLeaveAndClose();
+            }}
+            title={t("voice.leaveCall")}
+          >
+            <span className="material-symbols-outlined">call_end</span>
+          </button>
         </div>
       </section>
     );
@@ -547,7 +685,7 @@ function VoicePanel({
               {isBusy ? t("voice.joining") : t("voice.joinCall")}
             </button>
           ) : (
-            <button type="button" className="ghost-button danger" onClick={leaveVoiceChannel}>
+            <button type="button" className="ghost-button danger" onClick={handleLeaveAndClose}>
               {t("voice.leaveCall")}
             </button>
           )}

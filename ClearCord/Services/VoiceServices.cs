@@ -124,7 +124,11 @@ public sealed class VoiceService(
         var dtos = participants.Select(participant => participant.ToVoiceParticipantDto()).ToArray();
 
         // The participant list is the source of truth for WebRTC signaling presence inside a voice channel.
-        await realtimeNotifier.NotifyChannelAsync(channelId, "voiceParticipantsUpdated", dtos, cancellationToken);
+        await realtimeNotifier.NotifyChannelAsync(channelId, "voiceParticipantsUpdated", new
+        {
+            channelId,
+            participants = dtos
+        }, cancellationToken);
         return dtos;
     }
 }
