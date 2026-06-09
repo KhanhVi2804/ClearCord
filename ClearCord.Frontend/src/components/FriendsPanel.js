@@ -82,14 +82,6 @@ function FriendsPanel({
           <span>person</span>
           {t("tabs.friends")}
         </button>
-        <button type="button">
-          <span>bolt</span>
-          Nitro
-        </button>
-        <button type="button">
-          <span>shopping_bag</span>
-          Shop
-        </button>
       </nav>
 
       <div className="drawer-section">
