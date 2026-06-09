@@ -123,7 +123,7 @@ function ChannelList({
   }
 
   function renderChannelGroup(title, groupChannels, channelType, categoryId = "") {
-    if (!groupChannels.length && !canManageChannels) {
+    if (!groupChannels.length) {
       return null;
     }
 

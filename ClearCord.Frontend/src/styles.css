@@ -3310,22 +3310,64 @@ select:focus {
 
 .chat-search-mini {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  width: 150px;
-  height: 28px;
-  padding: 0 0.45rem 0 0.65rem;
-  border-radius: 6px;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 176px;
+  height: 32px;
+  padding: 0 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: #111318;
+  box-sizing: border-box;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
 }
 
-.chat-search-mini input {
+.chat-search-mini:focus-within {
+  border-color: rgba(73, 198, 180, 0.48);
+  background: #0d1015;
+}
+
+.chat-search-mini input[type="search"] {
+  appearance: none;
+  -webkit-appearance: none;
   min-width: 0;
   width: 100%;
+  height: 100%;
   border: 0;
+  border-radius: 0;
+  padding: 0;
   outline: 0;
   background: transparent;
   color: #f1f2f8;
   font-size: 0.82rem;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.chat-search-mini input[type="search"]:focus {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.chat-search-mini input[type="search"]::-webkit-search-decoration,
+.chat-search-mini input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
+
+.chat-header-actions .chat-search-mini .material-symbols-outlined {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: #c9cbda;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .message-stream {
