@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toAssetUrl } from "../services/api";
 import { useI18n } from "../i18n";
+import { getGifUrlFromContent } from "../utils/messageContent";
 
 const QUICK_REACTIONS = [
   "\u{1F44D}",
@@ -12,6 +13,7 @@ const QUICK_REACTIONS = [
 
 const IMAGE_EXTENSIONS = [".avif", ".gif", ".jpeg", ".jpg", ".png", ".webp"];
 const VIDEO_EXTENSIONS = [".m4v", ".mov", ".mp4", ".ogg", ".ogv", ".webm"];
+const AUDIO_EXTENSIONS = [".aac", ".flac", ".m4a", ".mp3", ".oga", ".ogg", ".opus", ".wav"];
 
 function getFileExtension(fileName = "") {
   const dotIndex = fileName.lastIndexOf(".");
@@ -24,6 +26,10 @@ function getAttachmentKind(attachment) {
 
   if (attachment.isImage || contentType.startsWith("image/") || IMAGE_EXTENSIONS.includes(extension)) {
     return "image";
+  }
+
+  if (contentType.startsWith("audio/") || AUDIO_EXTENSIONS.includes(extension)) {
+    return "audio";
   }
 
   if (contentType.startsWith("video/") || VIDEO_EXTENSIONS.includes(extension)) {
@@ -51,6 +57,51 @@ function groupReactions(reactions, currentUserId) {
   return Array.from(grouped.values());
 }
 
+function scoreSpeechVoice(voice, language) {
+  const voiceName = voice.name.toLowerCase();
+  const voiceLang = voice.lang.toLowerCase();
+
+  if (language === "vi") {
+    let score = 0;
+
+    if (voiceLang === "vi-vn") {
+      score += 100;
+    } else if (voiceLang.startsWith("vi")) {
+      score += 80;
+    }
+
+    if (voiceName.includes("vietnam") || voiceName.includes("viet")) {
+      score += 20;
+    }
+
+    if (voiceName.includes("google") || voiceName.includes("microsoft")) {
+      score += 10;
+    }
+
+    return score;
+  }
+
+  let score = voiceLang === "en-us" ? 80 : 0;
+  if (voiceLang.startsWith("en")) {
+    score += 40;
+  }
+  if (voiceName.includes("google") || voiceName.includes("microsoft")) {
+    score += 10;
+  }
+
+  return score;
+}
+
+function getPreferredSpeechVoice(language) {
+  const voices = window.speechSynthesis?.getVoices?.() ?? [];
+  const rankedVoices = voices
+    .map((voice) => ({ voice, score: scoreSpeechVoice(voice, language) }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  return rankedVoices[0]?.voice ?? null;
+}
+
 function MessageItem({
   currentUserId,
   message,
@@ -68,11 +119,12 @@ function MessageItem({
   onToggleReaction,
   onViewProfile
 }) {
-  const { t, formatTime } = useI18n();
+  const { t, formatTime, language } = useI18n();
   const [editDraft, setEditDraft] = useState(message.content || "");
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const articleRef = useRef(null);
   const sender = message.sender ?? {};
+  const gifMessageUrl = getGifUrlFromContent(message.content || "");
   const initials =
     sender.displayName?.[0]?.toUpperCase() || sender.userName?.[0]?.toUpperCase() || "U";
 
@@ -118,6 +170,34 @@ function MessageItem({
   function runAction(action) {
     setIsActionMenuOpen(false);
     action();
+  }
+
+  function speakMessage() {
+    if (
+      typeof window === "undefined" ||
+      !("speechSynthesis" in window) ||
+      !("SpeechSynthesisUtterance" in window) ||
+      !message.content?.trim() ||
+      gifMessageUrl
+    ) {
+      return;
+    }
+
+    const utterance = new window.SpeechSynthesisUtterance(message.content.trim());
+    const preferredVoice = getPreferredSpeechVoice(language);
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+      utterance.lang = preferredVoice.lang;
+    } else {
+      utterance.lang = language === "vi" ? "vi-VN" : "en-US";
+    }
+
+    utterance.rate = language === "vi" ? 0.92 : 1;
+    utterance.pitch = 1;
+
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
   }
 
   return (
@@ -169,6 +249,12 @@ function MessageItem({
               {message.isPinned ? t("chat.unpin") : t("chat.pin")}
             </button>
           )}
+
+          {!message.isDeleted && message.content?.trim() && !gifMessageUrl && (
+            <button type="button" className="chip-button" onClick={() => runAction(speakMessage)}>
+              {t("chat.speakMessage")}
+            </button>
+          )}
         </div>
 
         {!message.isDeleted && (
@@ -205,7 +291,9 @@ function MessageItem({
           <div className="reply-pill">
             {t("chat.replyPreview", {
               name: message.replyTo.sender?.displayName || message.replyTo.sender?.userName,
-              content: message.replyTo.content || t("chat.attachment").toLowerCase()
+              content: getGifUrlFromContent(message.replyTo.content || "")
+                ? t("chat.gifMessage")
+                : message.replyTo.content || t("chat.attachment").toLowerCase()
             })}
           </div>
         )}
@@ -233,13 +321,19 @@ function MessageItem({
               </button>
             </div>
           </form>
-        ) : (
+        ) : gifMessageUrl && !message.isDeleted ? null : (
           <div className={`message-bubble ${message.isDeleted ? "deleted" : ""}`}>
             {message.isDeleted ? t("chat.deletedMessage") : message.content || t("chat.attachmentOnly")}
           </div>
         )}
 
-        {message.attachments?.length > 0 && (
+        {!message.isDeleted && gifMessageUrl && (
+          <div className="gif-message-attachment">
+            <img src={gifMessageUrl} alt={t("chat.gifMessage")} loading="lazy" />
+          </div>
+        )}
+
+        {!message.isDeleted && message.attachments?.length > 0 && (
           <div className="attachment-stack">
             {message.attachments.map((attachment) => {
               const attachmentUrl = toAssetUrl(attachment.url);
@@ -264,6 +358,17 @@ function MessageItem({
                 );
               }
 
+              if (attachmentKind === "audio") {
+                return (
+                  <div key={attachment.id} className="audio-attachment">
+                    <audio controls preload="metadata" src={attachmentUrl}>
+                      <a href={attachmentUrl}>{attachment.fileName}</a>
+                    </audio>
+                    <span>{attachment.fileName}</span>
+                  </div>
+                );
+              }
+
               return (
                 <a
                   key={attachment.id}
@@ -279,7 +384,7 @@ function MessageItem({
           </div>
         )}
 
-        {groupedReactions.length > 0 && (
+        {!message.isDeleted && groupedReactions.length > 0 && (
           <div className="reaction-row">
             {groupedReactions.map((reaction) => (
               <button
