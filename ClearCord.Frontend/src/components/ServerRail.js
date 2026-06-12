@@ -1,4 +1,5 @@
 import { toAssetUrl } from "../services/api";
+import ClearSettingsMenu from "./ClearSettingsMenu";
 import LanguageSwitcher from "./LanguageSwitcher";
 import { useI18n } from "../i18n";
 import appLogoUrl from "../assets/app-logo.png";
@@ -11,6 +12,10 @@ function ServerRail({
   onSelectServer,
   onOpenCreateServer,
   onOpenJoinServer,
+  isClearEnabled,
+  notificationVolume,
+  onClearEnabledChange,
+  onNotificationVolumeChange,
   onOpenProfile,
   onLogout
 }) {
@@ -58,6 +63,12 @@ function ServerRail({
       </div>
 
       <div className="server-rail-actions">
+        <ClearSettingsMenu
+          isClearEnabled={isClearEnabled}
+          notificationVolume={notificationVolume}
+          onClearEnabledChange={onClearEnabledChange}
+          onNotificationVolumeChange={onNotificationVolumeChange}
+        />
         <button
           type="button"
           className="server-tile server-tile-add"

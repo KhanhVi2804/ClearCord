@@ -399,6 +399,13 @@ export const directApi = {
   }
 };
 
+export const clearAiApi = {
+  async assist(payload) {
+    const response = await api.post("/api/clear-ai/assist", payload);
+    return response.data;
+  }
+};
+
 export const notificationApi = {
   async getMine() {
     const response = await api.get("/api/notifications");

@@ -448,6 +448,7 @@ select:focus {
   flex-direction: column;
   background: var(--bg-chat);
   min-height: 0;
+  position: relative;
 }
 
 .chat-stage > .chat-panel,
@@ -482,6 +483,147 @@ select:focus {
   align-items: center;
   gap: 0.45rem;
   flex-shrink: 0;
+}
+
+.server-rail-settings {
+  position: relative;
+}
+
+.server-tile-settings .material-symbols-outlined {
+  font-size: 1.3rem;
+}
+
+.server-settings-popover {
+  position: absolute;
+  bottom: 0;
+  left: calc(100% + 0.75rem);
+  width: min(320px, calc(100vw - 8rem));
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(78, 205, 196, 0.12), transparent 40%),
+    linear-gradient(180deg, rgba(24, 27, 34, 0.98), rgba(17, 19, 24, 0.98));
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
+  z-index: 18;
+}
+
+.server-settings-popover-header h3 {
+  margin: 0.1rem 0 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.05rem;
+}
+
+.server-settings-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.server-settings-group.volume {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.server-settings-copy strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.server-settings-copy p {
+  margin: 0.32rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.settings-switch {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+.settings-switch-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 52px;
+  height: 30px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background-color 140ms ease;
+}
+
+.settings-switch.active .settings-switch-track {
+  background: rgba(78, 205, 196, 0.36);
+}
+
+.settings-switch-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+  transition: transform 140ms ease;
+}
+
+.settings-switch.active .settings-switch-thumb {
+  transform: translateX(22px);
+}
+
+.settings-open-assistant {
+  width: 100%;
+  margin-top: 1rem;
+  justify-content: center;
+}
+
+.settings-volume-slider {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  accent-color: #4ecdc4;
+}
+
+.settings-volume-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.settings-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 50%;
+  background: #4ecdc4;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.settings-volume-slider::-moz-range-track {
+  height: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.settings-volume-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: #4ecdc4;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
 .server-rail-footer {
@@ -3553,6 +3695,124 @@ select:focus {
   word-break: break-word;
 }
 
+.clear-assistant-dock {
+  position: fixed;
+  top: 5.75rem;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: auto;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.85rem;
+  pointer-events: none;
+}
+
+.clear-assistant-dock > * {
+  pointer-events: auto;
+}
+
+.clear-assistant-panel {
+  width: min(360px, calc(100vw - 2rem));
+  max-height: calc(100vh - 7rem);
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(78, 205, 196, 0.16), transparent 38%),
+    linear-gradient(180deg, rgba(24, 27, 34, 0.98), rgba(17, 19, 24, 0.98));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  contain: layout paint;
+}
+
+.clear-assistant-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.clear-assistant-header h3 {
+  margin: 0.15rem 0 0;
+}
+
+.clear-assistant-context {
+  margin: 0.75rem 0 0;
+  color: #adb3c7;
+  font-size: 0.9rem;
+}
+
+.clear-assistant-status {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.95rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(78, 205, 196, 0.14);
+  border-radius: 16px;
+  background: rgba(40, 56, 60, 0.42);
+  color: #dce8eb;
+}
+
+.clear-assistant-status.listening {
+  border-color: rgba(78, 205, 196, 0.34);
+  background: rgba(39, 85, 80, 0.35);
+}
+
+.clear-assistant-status.error {
+  border-color: rgba(255, 121, 121, 0.3);
+  background: rgba(115, 43, 54, 0.32);
+  color: #ffe0e2;
+}
+
+.clear-assistant-controls {
+  margin-top: 0.95rem;
+}
+
+.clear-assistant-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #4ecdc4, #2a9d8f);
+  color: #082220;
+  font-weight: 900;
+}
+
+.clear-assistant-mic.listening {
+  background: linear-gradient(135deg, #5ad1c8, #39ad9f);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.clear-assistant-support-note {
+  margin: 0.55rem 0 0;
+  color: #aeb4c7;
+  font-size: 0.84rem;
+}
+
+.clear-assistant-manual {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  margin-top: 0.95rem;
+}
+
+.clear-assistant-manual input {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f2f8;
+  padding: 0.8rem 0.9rem;
+}
+
 .gif-message-attachment {
   max-width: min(360px, 72vw);
 }
@@ -3854,6 +4114,25 @@ select:focus {
   .nav-rail-footer {
     display: flex;
     flex-direction: row;
+  }
+
+  .clear-assistant-dock {
+    top: auto;
+    right: 1rem;
+    left: 1rem;
+    bottom: calc(7.4rem + env(safe-area-inset-bottom));
+    align-items: stretch;
+  }
+
+  .server-settings-popover {
+    top: auto;
+    bottom: calc(100% + 0.65rem);
+    left: -1rem;
+    width: min(320px, calc(100vw - 2rem));
+  }
+
+  .clear-assistant-panel {
+    width: 100%;
   }
 
   .left-rails {

@@ -123,6 +123,11 @@ public interface IConnectionService
     Task DisconnectAsync(string connectionId, CancellationToken cancellationToken = default);
 }
 
+public interface IClearAiService
+{
+    Task<ClearAiResponseDto> AssistAsync(string userId, ClearAiRequest request, CancellationToken cancellationToken = default);
+}
+
 public sealed record StoredFileResult(
     string FileName,
     string StoredFileName,

@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import AdminPanel from "../components/AdminPanel";
 import ChatBox from "../components/ChatBox";
+import ClearAssistantPanel from "../components/ClearAssistantPanel";
 import ModalShell from "../components/ModalShell";
 import ProfilePanel from "../components/ProfilePanel";
 import SecondaryPanel from "../components/SecondaryPanel";
@@ -9,6 +10,7 @@ import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
 import WorkspaceRail from "../components/WorkspaceRail";
 import {
+  clearAiApi,
   channelApi,
   directApi,
   friendApi,
@@ -21,6 +23,11 @@ import {
 } from "../services/api";
 import { chatSignalR } from "../services/signalr";
 import {
+  isCallNotification,
+  playNotificationChime,
+  primeNotificationAudio
+} from "../utils/notificationSound";
+import {
   computePermissions,
   markMessageDeleted,
   resolveTypingUsers,
@@ -29,6 +36,35 @@ import {
   upsertMessage
 } from "./chatHelpers";
 import { useI18n } from "../i18n";
+
+const CLEAR_ENABLED_STORAGE_KEY = "clearcord.clearAssistant.enabled";
+const NOTIFICATION_VOLUME_STORAGE_KEY = "clearcord.notification.volume";
+
+function getInitialClearEnabled() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const storedValue = window.localStorage.getItem(CLEAR_ENABLED_STORAGE_KEY);
+  if (storedValue === null) {
+    return true;
+  }
+
+  return storedValue === "true";
+}
+
+function getInitialNotificationVolume() {
+  if (typeof window === "undefined") {
+    return 0.75;
+  }
+
+  const storedValue = Number(window.localStorage.getItem(NOTIFICATION_VOLUME_STORAGE_KEY));
+  if (Number.isNaN(storedValue)) {
+    return 0.75;
+  }
+
+  return Math.max(0, Math.min(1, storedValue));
+}
 
 function FriendsHomePanel({
   friends,
@@ -205,7 +241,7 @@ function ChatPage({
   onInviteConsumed,
   onLogout
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [servers, setServers] = useState([]);
   const [selectedServerId, setSelectedServerId] = useState(null);
   const [selectedServer, setSelectedServer] = useState(null);
@@ -221,6 +257,9 @@ function ChatPage({
   const [directVoiceConversation, setDirectVoiceConversation] = useState(null);
   const [friendRequests, setFriendRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [isClearEnabled, setIsClearEnabled] = useState(getInitialClearEnabled);
+  const [notificationVolume, setNotificationVolume] = useState(getInitialNotificationVolume);
+  const [isClearAssistantOpen, setIsClearAssistantOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isServersLoading, setIsServersLoading] = useState(true);
@@ -297,6 +336,28 @@ function ChatPage({
     : currentVoiceChannel;
 
   const directPeer = selectedDirectConversation?.otherUser ?? null;
+  const clearAssistantContextLabel = useMemo(() => {
+    if (selectedDirectConversation?.otherUser) {
+      return t("assistant.contextDirect", {
+        name: selectedDirectConversation.otherUser.displayName || selectedDirectConversation.otherUser.userName
+      });
+    }
+
+    if (currentTextChannel && selectedServer) {
+      return t("assistant.contextChannel", {
+        channel: currentTextChannel.name,
+        server: selectedServer.name
+      });
+    }
+
+    if (selectedServer) {
+      return t("assistant.contextServer", {
+        server: selectedServer.name
+      });
+    }
+
+    return t("assistant.contextGlobal");
+  }, [currentTextChannel, selectedDirectConversation, selectedServer, t]);
 
   const permissions = useMemo(
     () => computePermissions(selectedServer, currentUser.id),
@@ -333,6 +394,26 @@ function ChatPage({
     chatSignalR.start().catch((error) => {
       console.warn("Failed to start SignalR eagerly.", error);
     });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(CLEAR_ENABLED_STORAGE_KEY, String(isClearEnabled));
+  }, [isClearEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(NOTIFICATION_VOLUME_STORAGE_KEY, String(notificationVolume));
+  }, [notificationVolume]);
+
+  useEffect(() => {
+    return primeNotificationAudio();
   }, []);
 
   useEffect(() => {
@@ -374,6 +455,13 @@ function ChatPage({
     });
     const unsubscribeNotifications = chatSignalR.onNotificationCreated((notification) => {
       setNotifications((current) => sortNotifications([notification, ...current]));
+
+      if (notification.type === "Message") {
+        playNotificationChime(
+          isCallNotification(notification) ? "call" : "message",
+          notificationVolume
+        ).catch(() => {});
+      }
 
       if (notification.type === "FriendRequest") {
         refreshFriendsAndRequests().catch((error) => {
@@ -435,7 +523,7 @@ function ChatPage({
       unsubscribePresence();
       unsubscribeTyping();
     };
-  }, [currentUser, onCurrentUserChange, selectedDirectConversation?.id, selectedTextChannelId]);
+  }, [currentUser, notificationVolume, onCurrentUserChange, selectedDirectConversation?.id, selectedTextChannelId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -776,6 +864,109 @@ function ChatPage({
     });
   }, [activeView]);
 
+  function buildClearAssistantRequest(prompt) {
+    return {
+      prompt,
+      language,
+      serverId: selectedDirectConversation ? null : selectedServerId,
+      serverName: selectedDirectConversation ? null : selectedServer?.name ?? null,
+      channelId: selectedDirectConversation ? null : selectedTextChannelId,
+      channelName: selectedDirectConversation ? null : currentTextChannel?.name ?? null,
+      directConversationId: selectedDirectConversation?.id ?? null,
+      directConversationName:
+        selectedDirectConversation?.otherUser?.displayName ||
+        selectedDirectConversation?.otherUser?.userName ||
+        null,
+      directConversationPeerUserId: selectedDirectConversation?.otherUser?.id ?? null
+    };
+  }
+
+  async function handleOpenAssistantTextChannel(serverId, channelId) {
+    if (!serverId || !channelId) {
+      return;
+    }
+
+    if (!servers.some((server) => server.id === serverId)) {
+      await refreshServers(serverId);
+    }
+
+    setSelectedDirectConversation(null);
+    setDirectVoiceConversation(null);
+    setIsVoiceSessionActive(false);
+    setSelectedServerId(serverId);
+    setSelectedTextChannelId(channelId);
+    setActiveView("chat");
+  }
+
+  async function handleClearAssistantRequest(prompt) {
+    const response = await clearAiApi.assist(buildClearAssistantRequest(prompt));
+
+    if (
+      (response.action?.type === "startDirectCall" || response.action?.type === "startVideoCall") &&
+      response.action.targetUserId
+    ) {
+      await handleStartDirectCall(response.action.targetUserId);
+      return response;
+    }
+
+    if (response.action?.type === "openDirectConversation" && response.action.targetUserId) {
+      await handleStartDirectChat(response.action.targetUserId);
+      return response;
+    }
+
+    if (
+      (response.action?.type === "openTextChannel" || response.action?.type === "composeChannelMessage") &&
+      response.action.serverId &&
+      response.action.channelId
+    ) {
+      await handleOpenAssistantTextChannel(response.action.serverId, response.action.channelId);
+      return response;
+    }
+
+    return response;
+  }
+
+  async function handleFinalizeClearAssistantDraft(session, content) {
+    if (session.kind === "direct" && session.targetUserId) {
+      const conversation = await handleStartDirectChat(session.targetUserId);
+      await chatSignalR.sendDirectMessage({
+        directConversationId: conversation.id,
+        content,
+        replyToMessageId: null
+      });
+
+      return {
+        message:
+          language === "vi"
+            ? `Mình đã gửi tin nhắn cho ${session.targetDisplayName}: "${content}"`
+            : `I sent the message to ${session.targetDisplayName}: "${content}"`,
+        mode: "send-direct-message",
+        usedExternalModel: false,
+        action: null
+      };
+    }
+
+    if (session.kind === "channel" && session.contextId) {
+      await chatSignalR.sendMessage({
+        channelId: session.contextId,
+        content,
+        replyToMessageId: null
+      });
+
+      return {
+        message:
+          language === "vi"
+            ? `Mình đã gửi vào #${session.targetDisplayName}: "${content}"`
+            : `I sent the message to #${session.targetDisplayName}: "${content}"`,
+        mode: "send-channel-message",
+        usedExternalModel: false,
+        action: null
+      };
+    }
+
+    throw new Error(language === "vi" ? "Phiên soạn tin nhắn không hợp lệ." : "The message drafting session is invalid.");
+  }
+
   async function handleSendMessage({ content, files, replyToMessageId }) {
     setSendError("");
 
@@ -986,6 +1177,7 @@ function ChatPage({
         return [conversation, ...withoutCurrent];
       });
       setActiveView("friends");
+      return conversation;
     } catch (error) {
       setSocialError(error.message);
       setMessageError(error.message);
@@ -1194,6 +1386,10 @@ function ChatPage({
             onSelectServer={handleSelectServer}
             onOpenCreateServer={() => setIsCreateServerVisible(true)}
             onOpenJoinServer={() => setIsJoinServerVisible(true)}
+            isClearEnabled={isClearEnabled}
+            notificationVolume={notificationVolume}
+            onClearEnabledChange={setIsClearEnabled}
+            onNotificationVolumeChange={setNotificationVolume}
             onOpenProfile={() => setActiveView("profile")}
             onLogout={onLogout}
           />
@@ -1355,6 +1551,16 @@ function ChatPage({
               onOpenFriends={() => setActiveView("friends")}
             />
           ) : null}
+          {!shouldShowVoiceWorkspace && (
+              <ClearAssistantPanel
+                currentContextLabel={clearAssistantContextLabel}
+                isOpen={isClearAssistantOpen}
+                isClearEnabled={isClearEnabled}
+                onOpenChange={setIsClearAssistantOpen}
+                onAssistRequest={handleClearAssistantRequest}
+                onFinalizeDraftMessage={handleFinalizeClearAssistantDraft}
+              />
+            )}
         </div>
 
         {directPeer ? (

@@ -30,6 +30,7 @@ builder.Logging.AddDebug();
 builder.Logging.AddEventSourceLogger();
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
+builder.Services.Configure<ClearAiSettings>(builder.Configuration.GetSection(ClearAiSettings.SectionName));
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -121,6 +122,7 @@ builder.Services.AddSignalR()
     });
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<ApplicationDbContext>());
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -148,6 +150,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IVoiceService, VoiceService>();
 builder.Services.AddScoped<IDirectVoiceService, DirectVoiceService>();
 builder.Services.AddScoped<IConnectionService, ConnectionService>();
+builder.Services.AddScoped<IClearAiService, ClearAiService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
 
@@ -176,6 +179,8 @@ app.MapFallbackToFile("client/index.html");
 
 using (var scope = app.Services.CreateScope())
 {
+    LocalDbBootstrapper.EnsureStarted(builder.Configuration.GetConnectionString("DefaultConnection"));
+
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     try
     {
