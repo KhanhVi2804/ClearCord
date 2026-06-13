@@ -264,10 +264,19 @@ async function main() {
     const requests = await request("/api/friends/requests", { token: userB.token });
     return requests.find((item) => item.user.id === userA.user.id) || null;
   }, "friend request for user B");
+  const notificationForB = await waitUntil(async () => {
+    const notifications = await request("/api/notifications", { token: userB.token });
+    return notifications.find((item) => item.relatedEntityId === pendingForB.id) || null;
+  }, "friend request notification for user B");
   await request(`/api/friends/requests/${pendingForB.id}/accept`, {
     method: "POST",
     token: userB.token
   });
+  const readNotificationForB = await waitUntil(async () => {
+    const notifications = await request("/api/notifications", { token: userB.token });
+    return notifications.find((item) => item.id === notificationForB.id && item.isRead) || null;
+  }, "accepted friend request notification read state");
+  assert(readNotificationForB, "accepted friend request notification should be marked read");
   const friendsA = await request("/api/friends", { token: userA.token });
   assert(friendsA.some((friend) => friend.userId === userB.user.id), "accepted friend should appear");
 
@@ -283,10 +292,19 @@ async function main() {
     const requests = await request("/api/friends/requests", { token: userC.token });
     return requests.find((item) => item.user.id === userB.user.id) || null;
   }, "friend request for user C");
+  const notificationForC = await waitUntil(async () => {
+    const notifications = await request("/api/notifications", { token: userC.token });
+    return notifications.find((item) => item.relatedEntityId === pendingForC.id) || null;
+  }, "friend request notification for user C");
   await request(`/api/friends/requests/${pendingForC.id}/reject`, {
     method: "POST",
     token: userC.token
   });
+  const readNotificationForC = await waitUntil(async () => {
+    const notifications = await request("/api/notifications", { token: userC.token });
+    return notifications.find((item) => item.id === notificationForC.id && item.isRead) || null;
+  }, "rejected friend request notification read state");
+  assert(readNotificationForC, "rejected friend request notification should be marked read");
   const rejectedFriends = await request("/api/friends", { token: userC.token });
   assert(!rejectedFriends.some((friend) => friend.userId === userB.user.id), "rejected request should not create a friendship");
 

@@ -194,6 +194,27 @@ using (var scope = app.Services.CreateScope())
             "Point 'ConnectionStrings:DefaultConnection' to a fresh database name or delete the old schema before starting the app.",
             exception);
     }
+
+    var staleConnections = await dbContext.UserConnections.ToListAsync();
+    if (staleConnections.Count > 0)
+    {
+        dbContext.UserConnections.RemoveRange(staleConnections);
+    }
+
+    var usersMarkedOnline = await dbContext.Users
+        .Where(user => user.IsOnline)
+        .ToListAsync();
+
+    foreach (var user in usersMarkedOnline)
+    {
+        user.IsOnline = false;
+        user.LastSeenAt = DateTimeOffset.UtcNow;
+    }
+
+    if (staleConnections.Count > 0 || usersMarkedOnline.Count > 0)
+    {
+        await dbContext.SaveChangesAsync();
+    }
 }
 
 app.Run();

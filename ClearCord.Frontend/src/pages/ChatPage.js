@@ -29,6 +29,7 @@ import {
 } from "../utils/notificationSound";
 import {
   computePermissions,
+  markRelatedNotificationsRead,
   markMessageDeleted,
   resolveTypingUsers,
   sortNotifications,
@@ -1289,11 +1290,17 @@ function ChatPage({
 
   async function handleAcceptRequest(requestId) {
     await friendApi.acceptRequest(requestId);
+    setNotifications((current) =>
+      markRelatedNotificationsRead(current, "FriendRequest", requestId)
+    );
     await refreshFriendsAndRequests({ force: true });
   }
 
   async function handleRejectRequest(requestId) {
     await friendApi.rejectRequest(requestId);
+    setNotifications((current) =>
+      markRelatedNotificationsRead(current, "FriendRequest", requestId)
+    );
     await refreshFriendsAndRequests({ force: true });
   }
 

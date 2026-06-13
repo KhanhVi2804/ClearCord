@@ -69,6 +69,34 @@ export function upsertNotification(notifications, incomingNotification) {
   return sortNotifications(nextNotifications);
 }
 
+export function markRelatedNotificationsRead(notifications, relatedEntityType, relatedEntityId) {
+  let changed = false;
+  const normalizedType = relatedEntityType?.toLowerCase() ?? "";
+  const normalizedId = relatedEntityId?.toLowerCase() ?? "";
+
+  const nextNotifications = notifications.map((notification) => {
+    if (notification.isRead) {
+      return notification;
+    }
+
+    if ((notification.relatedEntityType?.toLowerCase() ?? "") !== normalizedType) {
+      return notification;
+    }
+
+    if ((notification.relatedEntityId?.toLowerCase() ?? "") !== normalizedId) {
+      return notification;
+    }
+
+    changed = true;
+    return {
+      ...notification,
+      isRead: true
+    };
+  });
+
+  return changed ? nextNotifications : notifications;
+}
+
 export function updatePresenceInUsers(users, payload, idSelector = (user) => user.id) {
   let changed = false;
   const nextUsers = users.map((user) => {

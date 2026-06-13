@@ -162,6 +162,38 @@ public sealed class NotificationService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task MarkRelatedReadAsync(string userId, string relatedEntityType, string relatedEntityId, CancellationToken cancellationToken = default)
+    {
+        var notifications = await notificationRepository.GetForUserAsync(userId, cancellationToken);
+        var hasChanges = false;
+
+        foreach (var notification in notifications)
+        {
+            if (notification.IsRead)
+            {
+                continue;
+            }
+
+            if (!string.Equals(notification.RelatedEntityType, relatedEntityType, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!string.Equals(notification.RelatedEntityId, relatedEntityId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            notification.IsRead = true;
+            hasChanges = true;
+        }
+
+        if (hasChanges)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     public async Task NotifyAsync(string userId, NotificationType type, string title, string content, string? relatedEntityType = null, string? relatedEntityId = null, CancellationToken cancellationToken = default)
     {
         var notification = new UserNotification
@@ -498,6 +530,11 @@ public sealed class FriendService(
         request.Status = FriendRequestStatus.Accepted;
         request.RespondedAt = DateTimeOffset.UtcNow;
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await notificationService.MarkRelatedReadAsync(
+            currentUserId,
+            nameof(FriendRequest),
+            request.Id.ToString(),
+            cancellationToken);
 
         await notificationService.NotifyAsync(
             request.RequesterId,
@@ -529,6 +566,11 @@ public sealed class FriendService(
         request.Status = FriendRequestStatus.Rejected;
         request.RespondedAt = DateTimeOffset.UtcNow;
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await notificationService.MarkRelatedReadAsync(
+            currentUserId,
+            nameof(FriendRequest),
+            request.Id.ToString(),
+            cancellationToken);
         return request.ToFriendRequestDto(currentUserId);
     }
 

@@ -96,6 +96,7 @@ public interface INotificationService
     Task<IReadOnlyCollection<NotificationDto>> GetForUserAsync(string userId, CancellationToken cancellationToken = default);
     Task MarkReadAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default);
     Task MarkAllReadAsync(string userId, CancellationToken cancellationToken = default);
+    Task MarkRelatedReadAsync(string userId, string relatedEntityType, string relatedEntityId, CancellationToken cancellationToken = default);
     Task NotifyAsync(string userId, NotificationType type, string title, string content, string? relatedEntityType = null, string? relatedEntityId = null, CancellationToken cancellationToken = default);
 }
 
