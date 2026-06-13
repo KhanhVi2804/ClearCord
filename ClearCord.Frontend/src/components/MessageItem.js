@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { toAssetUrl } from "../services/api";
 import { useI18n } from "../i18n";
 import { getGifUrlFromContent } from "../utils/messageContent";
@@ -360,4 +360,14 @@ function MessageItem({
   );
 }
 
-export default MessageItem;
+function areEqual(previousProps, nextProps) {
+  return previousProps.currentUserId === nextProps.currentUserId &&
+    previousProps.message === nextProps.message &&
+    previousProps.isOwnMessage === nextProps.isOwnMessage &&
+    previousProps.isEditing === nextProps.isEditing &&
+    previousProps.canEdit === nextProps.canEdit &&
+    previousProps.canDelete === nextProps.canDelete &&
+    previousProps.canPin === nextProps.canPin;
+}
+
+export default memo(MessageItem, areEqual);

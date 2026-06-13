@@ -24,15 +24,25 @@ export function upsertMessage(messages, incomingMessage) {
 }
 
 export function markMessageDeleted(messages, messageId) {
-  return messages.map((message) =>
-    message.id === messageId
-      ? {
-          ...message,
-          content: null,
-          isDeleted: true
-        }
-      : message
-  );
+  let changed = false;
+  const nextMessages = messages.map((message) => {
+    if (message.id !== messageId) {
+      return message;
+    }
+
+    if (message.isDeleted && message.content === null) {
+      return message;
+    }
+
+    changed = true;
+    return {
+      ...message,
+      content: null,
+      isDeleted: true
+    };
+  });
+
+  return changed ? nextMessages : messages;
 }
 
 export function sortNotifications(notifications) {
@@ -41,15 +51,39 @@ export function sortNotifications(notifications) {
   );
 }
 
-export function updatePresenceInUsers(users, payload, idSelector = (user) => user.id) {
-  return users.map((user) =>
-    idSelector(user) === payload.userId
-      ? {
-          ...user,
-          isOnline: payload.isOnline
-        }
-      : user
+export function upsertNotification(notifications, incomingNotification) {
+  const existingIndex = notifications.findIndex(
+    (notification) => notification.id === incomingNotification.id
   );
+
+  if (existingIndex < 0) {
+    return sortNotifications([incomingNotification, ...notifications]);
+  }
+
+  if (notifications[existingIndex] === incomingNotification) {
+    return notifications;
+  }
+
+  const nextNotifications = [...notifications];
+  nextNotifications[existingIndex] = incomingNotification;
+  return sortNotifications(nextNotifications);
+}
+
+export function updatePresenceInUsers(users, payload, idSelector = (user) => user.id) {
+  let changed = false;
+  const nextUsers = users.map((user) => {
+    if (idSelector(user) !== payload.userId || user.isOnline === payload.isOnline) {
+      return user;
+    }
+
+    changed = true;
+    return {
+      ...user,
+      isOnline: payload.isOnline
+    };
+  });
+
+  return changed ? nextUsers : users;
 }
 
 export function resolveTypingUsers(typingMap, currentUser, friends, requests, searchResults, server) {

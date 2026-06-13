@@ -150,6 +150,7 @@ class ChatSignalRService {
   constructor() {
     this.connection = null;
     this.startPromise = null;
+    this.joinedServerIds = new Set();
     this.joinedChannelIds = new Set();
     this.joinedDirectConversationIds = new Set();
     this.activeVoiceSession = null;
@@ -229,6 +230,14 @@ class ChatSignalRService {
 
     connection.onreconnected(async () => {
       this.emitConnectionState("connected");
+
+      for (const serverId of this.joinedServerIds) {
+        try {
+          await connection.invoke("JoinServer", serverId);
+        } catch (error) {
+          console.error("Failed to rejoin server after reconnect.", error);
+        }
+      }
 
       for (const channelId of this.joinedChannelIds) {
         try {
@@ -357,7 +366,12 @@ class ChatSignalRService {
 
   async joinServer(serverId) {
     const connection = await this.ensureConnection();
+    if (this.joinedServerIds.has(serverId)) {
+      return;
+    }
+
     await connection.invoke("JoinServer", serverId);
+    this.joinedServerIds.add(serverId);
   }
 
   async joinChannel(channelId) {
@@ -651,6 +665,7 @@ class ChatSignalRService {
   }
 
   async stop() {
+    this.joinedServerIds.clear();
     this.joinedChannelIds.clear();
     this.joinedDirectConversationIds.clear();
     this.activeVoiceSession = null;

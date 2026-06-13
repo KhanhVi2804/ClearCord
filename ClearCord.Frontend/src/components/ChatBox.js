@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MessageItem from "./MessageItem";
 import { useI18n } from "../i18n";
 import { getGifUrlFromContent, makeGifMessage } from "../utils/messageContent";
@@ -89,13 +89,24 @@ function ChatBox({
   const recordingChunksRef = useRef([]);
   const recordingStreamRef = useRef(null);
   const isMountedRef = useRef(true);
+  const lastChannelIdRef = useRef(currentChannel?.id ?? null);
 
   useEffect(() => {
     if (!messageListRef.current) {
       return;
     }
 
-    messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    const channelChanged = lastChannelIdRef.current !== currentChannel?.id;
+    const distanceFromBottom =
+      messageListRef.current.scrollHeight -
+      messageListRef.current.scrollTop -
+      messageListRef.current.clientHeight;
+
+    if (channelChanged || distanceFromBottom < 120) {
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    }
+
+    lastChannelIdRef.current = currentChannel?.id ?? null;
   }, [messages, currentChannel?.id]);
 
   useEffect(() => {
@@ -156,6 +167,39 @@ function ChatBox({
     Boolean(navigator.mediaDevices?.getUserMedia) &&
     typeof window !== "undefined" &&
     typeof window.MediaRecorder !== "undefined";
+  const normalizedMessageSearch = messageSearchTerm.trim().toLowerCase();
+  const normalizedGifSearch = gifSearchTerm.trim().toLowerCase();
+  const pinnedMessages = useMemo(
+    () => messages.filter((message) => message.isPinned && !message.isDeleted).slice(-3),
+    [messages]
+  );
+  const visibleGifOptions = useMemo(
+    () =>
+      normalizedGifSearch
+        ? GIF_OPTIONS.filter((gif) => `${gif.label} ${gif.tags}`.toLowerCase().includes(normalizedGifSearch))
+        : GIF_OPTIONS,
+    [normalizedGifSearch]
+  );
+  const visibleMessages = useMemo(
+    () =>
+      normalizedMessageSearch
+        ? messages.filter((message) => {
+            const searchableText = [
+              message.content,
+              getGifUrlFromContent(message.content) ? t("chat.gifMessage") : null,
+              message.sender?.displayName,
+              message.sender?.userName,
+              message.attachments?.map((attachment) => attachment.fileName).join(" ")
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+            return searchableText.includes(normalizedMessageSearch);
+          })
+        : messages,
+    [messages, normalizedMessageSearch, t]
+  );
 
   if (!currentServer && !isDirectConversation) {
     return (
@@ -172,29 +216,6 @@ function ChatBox({
       </section>
     );
   }
-
-  const pinnedMessages = messages.filter((message) => message.isPinned && !message.isDeleted).slice(-3);
-  const normalizedMessageSearch = messageSearchTerm.trim().toLowerCase();
-  const normalizedGifSearch = gifSearchTerm.trim().toLowerCase();
-  const visibleGifOptions = normalizedGifSearch
-    ? GIF_OPTIONS.filter((gif) => `${gif.label} ${gif.tags}`.toLowerCase().includes(normalizedGifSearch))
-    : GIF_OPTIONS;
-  const visibleMessages = normalizedMessageSearch
-    ? messages.filter((message) => {
-        const searchableText = [
-          message.content,
-          getGifUrlFromContent(message.content) ? t("chat.gifMessage") : null,
-          message.sender?.displayName,
-          message.sender?.userName,
-          message.attachments?.map((attachment) => attachment.fileName).join(" ")
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        return searchableText.includes(normalizedMessageSearch);
-      })
-    : messages;
 
   function getMessagePreview(message) {
     if (getGifUrlFromContent(message?.content || "")) {

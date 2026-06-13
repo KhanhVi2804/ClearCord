@@ -32,6 +32,7 @@ import {
   markMessageDeleted,
   resolveTypingUsers,
   sortNotifications,
+  upsertNotification,
   updatePresenceInUsers,
   upsertMessage
 } from "./chatHelpers";
@@ -298,6 +299,12 @@ function ChatPage({
   const previousTextChannelIdRef = useRef(null);
   const previousDirectConversationIdRef = useRef(null);
   const processedInviteCodeRef = useRef(null);
+  const selectedTextChannelIdRef = useRef(null);
+  const selectedDirectConversationIdRef = useRef(null);
+  const currentUserRef = useRef(currentUser);
+  const notificationVolumeRef = useRef(notificationVolume);
+  const onCurrentUserChangeRef = useRef(onCurrentUserChange);
+  const lastFriendsRefreshAtRef = useRef(0);
 
   const currentTextChannel = useMemo(
     () => selectedServer?.channels?.find((channel) => channel.id === selectedTextChannelId) ?? null,
@@ -397,6 +404,26 @@ function ChatPage({
   }, []);
 
   useEffect(() => {
+    selectedTextChannelIdRef.current = selectedTextChannelId;
+  }, [selectedTextChannelId]);
+
+  useEffect(() => {
+    selectedDirectConversationIdRef.current = selectedDirectConversation?.id ?? null;
+  }, [selectedDirectConversation?.id]);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    notificationVolumeRef.current = notificationVolume;
+  }, [notificationVolume]);
+
+  useEffect(() => {
+    onCurrentUserChangeRef.current = onCurrentUserChange;
+  }, [onCurrentUserChange]);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -420,16 +447,16 @@ function ChatPage({
     const unsubscribeConnection = chatSignalR.onConnectionStateChanged(setConnectionState);
     const unsubscribeCreated = chatSignalR.onMessageCreated((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribeUpdated = chatSignalR.onMessageUpdated((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
@@ -439,44 +466,44 @@ function ChatPage({
     });
     const unsubscribeReactions = chatSignalR.onMessageReactionChanged((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribePinned = chatSignalR.onMessagePinnedChanged((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribeNotifications = chatSignalR.onNotificationCreated((notification) => {
-      setNotifications((current) => sortNotifications([notification, ...current]));
+      setNotifications((current) => upsertNotification(current, notification));
 
       if (notification.type === "Message") {
         playNotificationChime(
           isCallNotification(notification) ? "call" : "message",
-          notificationVolume
+          notificationVolumeRef.current
         ).catch(() => {});
       }
 
       if (notification.type === "FriendRequest") {
-        refreshFriendsAndRequests().catch((error) => {
+        refreshFriendsAndRequests({ force: true }).catch((error) => {
           setSocialError(error.message);
         });
       }
     });
     const unsubscribePresence = chatSignalR.onPresenceChanged((payload) => {
-      if (payload.userId === currentUser.id) {
+      if (payload.userId === currentUserRef.current.id) {
         const updatedUser = {
-          ...currentUser,
+          ...currentUserRef.current,
           isOnline: payload.isOnline,
           lastSeenAt: payload.lastSeenAt
         };
-        onCurrentUserChange(updatedUser);
+        onCurrentUserChangeRef.current(updatedUser);
         updateStoredUser(updatedUser);
       }
 
@@ -504,11 +531,24 @@ function ChatPage({
       });
     const unsubscribeTyping = chatSignalR.onTypingChanged((payload) => {
       if (
-        ((!selectedDirectConversation && payload.channelId === selectedTextChannelId) ||
-          payload.directConversationId === selectedDirectConversation?.id) &&
-        payload.userId !== currentUser.id
+        ((!selectedDirectConversationIdRef.current && payload.channelId === selectedTextChannelIdRef.current) ||
+          payload.directConversationId === selectedDirectConversationIdRef.current) &&
+        payload.userId !== currentUserRef.current.id
       ) {
-        setTypingUsersMap((current) => new Map(current).set(payload.userId, payload.isTyping));
+        setTypingUsersMap((current) => {
+          const currentValue = current.get(payload.userId) ?? false;
+          if (currentValue === payload.isTyping) {
+            return current;
+          }
+
+          const next = new Map(current);
+          if (payload.isTyping) {
+            next.set(payload.userId, true);
+          } else {
+            next.delete(payload.userId);
+          }
+          return next;
+        });
       }
     });
 
@@ -523,7 +563,7 @@ function ChatPage({
       unsubscribePresence();
       unsubscribeTyping();
     };
-  }, [currentUser, notificationVolume, onCurrentUserChange, selectedDirectConversation?.id, selectedTextChannelId]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -552,6 +592,7 @@ function ChatPage({
         setDirectConversations(nextDirectConversations);
         setFriendRequests(nextRequests);
         setNotifications(sortNotifications(nextNotifications));
+        lastFriendsRefreshAtRef.current = Date.now();
         setSelectedServerId((current) =>
           current && serverList.some((server) => server.id === current)
             ? current
@@ -832,7 +873,11 @@ function ChatPage({
     setServerInvite(invite);
   }
 
-  async function refreshFriendsAndRequests() {
+  async function refreshFriendsAndRequests({ force = false } = {}) {
+    if (!force && Date.now() - lastFriendsRefreshAtRef.current < 30000) {
+      return;
+    }
+
     const [nextFriends, nextRequests] = await Promise.all([
       friendApi.getFriends(),
       friendApi.getRequests()
@@ -840,6 +885,7 @@ function ChatPage({
 
     setFriends(nextFriends);
     setFriendRequests(nextRequests);
+    lastFriendsRefreshAtRef.current = Date.now();
   }
 
   async function refreshDirectConversations(preferredConversationId) {
@@ -1237,23 +1283,23 @@ function ChatPage({
 
   async function handleSendFriendRequest(targetUserId) {
     await friendApi.sendRequest(targetUserId);
-    await refreshFriendsAndRequests();
+    await refreshFriendsAndRequests({ force: true });
     setSearchResults((current) => current.filter((user) => user.id !== targetUserId));
   }
 
   async function handleAcceptRequest(requestId) {
     await friendApi.acceptRequest(requestId);
-    await refreshFriendsAndRequests();
+    await refreshFriendsAndRequests({ force: true });
   }
 
   async function handleRejectRequest(requestId) {
     await friendApi.rejectRequest(requestId);
-    await refreshFriendsAndRequests();
+    await refreshFriendsAndRequests({ force: true });
   }
 
   async function handleUnfriend(friendUserId) {
     await friendApi.unfriend(friendUserId);
-    await refreshFriendsAndRequests();
+    await refreshFriendsAndRequests({ force: true });
   }
 
   async function handleMarkNotificationRead(notificationId) {
@@ -1282,7 +1328,7 @@ function ChatPage({
     const relatedEntityType = notification.relatedEntityType?.toLowerCase() ?? "";
 
     if (relatedEntityType === "friendrequest") {
-      await refreshFriendsAndRequests();
+      await refreshFriendsAndRequests({ force: true });
       setActiveView("friends");
       return;
     }
