@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import AdminPanel from "../components/AdminPanel";
 import ChatBox from "../components/ChatBox";
+import ClearAssistantPanel from "../components/ClearAssistantPanel";
 import ModalShell from "../components/ModalShell";
 import ProfilePanel from "../components/ProfilePanel";
 import SecondaryPanel from "../components/SecondaryPanel";
@@ -9,6 +10,7 @@ import UserProfileModal from "../components/UserProfileModal";
 import VoicePanel from "../components/VoicePanel";
 import WorkspaceRail from "../components/WorkspaceRail";
 import {
+  clearAiApi,
   channelApi,
   directApi,
   friendApi,
@@ -21,14 +23,50 @@ import {
 } from "../services/api";
 import { chatSignalR } from "../services/signalr";
 import {
+  isCallNotification,
+  playNotificationChime,
+  primeNotificationAudio
+} from "../utils/notificationSound";
+import {
   computePermissions,
+  markRelatedNotificationsRead,
   markMessageDeleted,
   resolveTypingUsers,
   sortNotifications,
+  upsertNotification,
   updatePresenceInUsers,
   upsertMessage
 } from "./chatHelpers";
 import { useI18n } from "../i18n";
+
+const CLEAR_ENABLED_STORAGE_KEY = "clearcord.clearAssistant.enabled";
+const NOTIFICATION_VOLUME_STORAGE_KEY = "clearcord.notification.volume";
+
+function getInitialClearEnabled() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const storedValue = window.localStorage.getItem(CLEAR_ENABLED_STORAGE_KEY);
+  if (storedValue === null) {
+    return true;
+  }
+
+  return storedValue === "true";
+}
+
+function getInitialNotificationVolume() {
+  if (typeof window === "undefined") {
+    return 0.75;
+  }
+
+  const storedValue = Number(window.localStorage.getItem(NOTIFICATION_VOLUME_STORAGE_KEY));
+  if (Number.isNaN(storedValue)) {
+    return 0.75;
+  }
+
+  return Math.max(0, Math.min(1, storedValue));
+}
 
 function FriendsHomePanel({
   friends,
@@ -205,7 +243,7 @@ function ChatPage({
   onInviteConsumed,
   onLogout
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [servers, setServers] = useState([]);
   const [selectedServerId, setSelectedServerId] = useState(null);
   const [selectedServer, setSelectedServer] = useState(null);
@@ -221,6 +259,9 @@ function ChatPage({
   const [directVoiceConversation, setDirectVoiceConversation] = useState(null);
   const [friendRequests, setFriendRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [isClearEnabled, setIsClearEnabled] = useState(getInitialClearEnabled);
+  const [notificationVolume, setNotificationVolume] = useState(getInitialNotificationVolume);
+  const [isClearAssistantOpen, setIsClearAssistantOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isServersLoading, setIsServersLoading] = useState(true);
@@ -259,6 +300,12 @@ function ChatPage({
   const previousTextChannelIdRef = useRef(null);
   const previousDirectConversationIdRef = useRef(null);
   const processedInviteCodeRef = useRef(null);
+  const selectedTextChannelIdRef = useRef(null);
+  const selectedDirectConversationIdRef = useRef(null);
+  const currentUserRef = useRef(currentUser);
+  const notificationVolumeRef = useRef(notificationVolume);
+  const onCurrentUserChangeRef = useRef(onCurrentUserChange);
+  const lastFriendsRefreshAtRef = useRef(0);
 
   const currentTextChannel = useMemo(
     () => selectedServer?.channels?.find((channel) => channel.id === selectedTextChannelId) ?? null,
@@ -297,6 +344,28 @@ function ChatPage({
     : currentVoiceChannel;
 
   const directPeer = selectedDirectConversation?.otherUser ?? null;
+  const clearAssistantContextLabel = useMemo(() => {
+    if (selectedDirectConversation?.otherUser) {
+      return t("assistant.contextDirect", {
+        name: selectedDirectConversation.otherUser.displayName || selectedDirectConversation.otherUser.userName
+      });
+    }
+
+    if (currentTextChannel && selectedServer) {
+      return t("assistant.contextChannel", {
+        channel: currentTextChannel.name,
+        server: selectedServer.name
+      });
+    }
+
+    if (selectedServer) {
+      return t("assistant.contextServer", {
+        server: selectedServer.name
+      });
+    }
+
+    return t("assistant.contextGlobal");
+  }, [currentTextChannel, selectedDirectConversation, selectedServer, t]);
 
   const permissions = useMemo(
     () => computePermissions(selectedServer, currentUser.id),
@@ -336,19 +405,59 @@ function ChatPage({
   }, []);
 
   useEffect(() => {
+    selectedTextChannelIdRef.current = selectedTextChannelId;
+  }, [selectedTextChannelId]);
+
+  useEffect(() => {
+    selectedDirectConversationIdRef.current = selectedDirectConversation?.id ?? null;
+  }, [selectedDirectConversation?.id]);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    notificationVolumeRef.current = notificationVolume;
+  }, [notificationVolume]);
+
+  useEffect(() => {
+    onCurrentUserChangeRef.current = onCurrentUserChange;
+  }, [onCurrentUserChange]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(CLEAR_ENABLED_STORAGE_KEY, String(isClearEnabled));
+  }, [isClearEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(NOTIFICATION_VOLUME_STORAGE_KEY, String(notificationVolume));
+  }, [notificationVolume]);
+
+  useEffect(() => {
+    return primeNotificationAudio();
+  }, []);
+
+  useEffect(() => {
     const unsubscribeConnection = chatSignalR.onConnectionStateChanged(setConnectionState);
     const unsubscribeCreated = chatSignalR.onMessageCreated((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribeUpdated = chatSignalR.onMessageUpdated((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
@@ -358,37 +467,44 @@ function ChatPage({
     });
     const unsubscribeReactions = chatSignalR.onMessageReactionChanged((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribePinned = chatSignalR.onMessagePinnedChanged((incomingMessage) => {
       if (
-        (!selectedDirectConversation && incomingMessage.channelId === selectedTextChannelId) ||
-        incomingMessage.directConversationId === selectedDirectConversation?.id
+        (!selectedDirectConversationIdRef.current && incomingMessage.channelId === selectedTextChannelIdRef.current) ||
+        incomingMessage.directConversationId === selectedDirectConversationIdRef.current
       ) {
         setMessages((current) => upsertMessage(current, incomingMessage));
       }
     });
     const unsubscribeNotifications = chatSignalR.onNotificationCreated((notification) => {
-      setNotifications((current) => sortNotifications([notification, ...current]));
+      setNotifications((current) => upsertNotification(current, notification));
+
+      if (notification.type === "Message") {
+        playNotificationChime(
+          isCallNotification(notification) ? "call" : "message",
+          notificationVolumeRef.current
+        ).catch(() => {});
+      }
 
       if (notification.type === "FriendRequest") {
-        refreshFriendsAndRequests().catch((error) => {
+        refreshFriendsAndRequests({ force: true }).catch((error) => {
           setSocialError(error.message);
         });
       }
     });
     const unsubscribePresence = chatSignalR.onPresenceChanged((payload) => {
-      if (payload.userId === currentUser.id) {
+      if (payload.userId === currentUserRef.current.id) {
         const updatedUser = {
-          ...currentUser,
+          ...currentUserRef.current,
           isOnline: payload.isOnline,
           lastSeenAt: payload.lastSeenAt
         };
-        onCurrentUserChange(updatedUser);
+        onCurrentUserChangeRef.current(updatedUser);
         updateStoredUser(updatedUser);
       }
 
@@ -416,11 +532,24 @@ function ChatPage({
       });
     const unsubscribeTyping = chatSignalR.onTypingChanged((payload) => {
       if (
-        ((!selectedDirectConversation && payload.channelId === selectedTextChannelId) ||
-          payload.directConversationId === selectedDirectConversation?.id) &&
-        payload.userId !== currentUser.id
+        ((!selectedDirectConversationIdRef.current && payload.channelId === selectedTextChannelIdRef.current) ||
+          payload.directConversationId === selectedDirectConversationIdRef.current) &&
+        payload.userId !== currentUserRef.current.id
       ) {
-        setTypingUsersMap((current) => new Map(current).set(payload.userId, payload.isTyping));
+        setTypingUsersMap((current) => {
+          const currentValue = current.get(payload.userId) ?? false;
+          if (currentValue === payload.isTyping) {
+            return current;
+          }
+
+          const next = new Map(current);
+          if (payload.isTyping) {
+            next.set(payload.userId, true);
+          } else {
+            next.delete(payload.userId);
+          }
+          return next;
+        });
       }
     });
 
@@ -435,7 +564,7 @@ function ChatPage({
       unsubscribePresence();
       unsubscribeTyping();
     };
-  }, [currentUser, onCurrentUserChange, selectedDirectConversation?.id, selectedTextChannelId]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -464,6 +593,7 @@ function ChatPage({
         setDirectConversations(nextDirectConversations);
         setFriendRequests(nextRequests);
         setNotifications(sortNotifications(nextNotifications));
+        lastFriendsRefreshAtRef.current = Date.now();
         setSelectedServerId((current) =>
           current && serverList.some((server) => server.id === current)
             ? current
@@ -744,7 +874,11 @@ function ChatPage({
     setServerInvite(invite);
   }
 
-  async function refreshFriendsAndRequests() {
+  async function refreshFriendsAndRequests({ force = false } = {}) {
+    if (!force && Date.now() - lastFriendsRefreshAtRef.current < 30000) {
+      return;
+    }
+
     const [nextFriends, nextRequests] = await Promise.all([
       friendApi.getFriends(),
       friendApi.getRequests()
@@ -752,6 +886,7 @@ function ChatPage({
 
     setFriends(nextFriends);
     setFriendRequests(nextRequests);
+    lastFriendsRefreshAtRef.current = Date.now();
   }
 
   async function refreshDirectConversations(preferredConversationId) {
@@ -775,6 +910,109 @@ function ChatPage({
       setSocialError(error.message);
     });
   }, [activeView]);
+
+  function buildClearAssistantRequest(prompt) {
+    return {
+      prompt,
+      language,
+      serverId: selectedDirectConversation ? null : selectedServerId,
+      serverName: selectedDirectConversation ? null : selectedServer?.name ?? null,
+      channelId: selectedDirectConversation ? null : selectedTextChannelId,
+      channelName: selectedDirectConversation ? null : currentTextChannel?.name ?? null,
+      directConversationId: selectedDirectConversation?.id ?? null,
+      directConversationName:
+        selectedDirectConversation?.otherUser?.displayName ||
+        selectedDirectConversation?.otherUser?.userName ||
+        null,
+      directConversationPeerUserId: selectedDirectConversation?.otherUser?.id ?? null
+    };
+  }
+
+  async function handleOpenAssistantTextChannel(serverId, channelId) {
+    if (!serverId || !channelId) {
+      return;
+    }
+
+    if (!servers.some((server) => server.id === serverId)) {
+      await refreshServers(serverId);
+    }
+
+    setSelectedDirectConversation(null);
+    setDirectVoiceConversation(null);
+    setIsVoiceSessionActive(false);
+    setSelectedServerId(serverId);
+    setSelectedTextChannelId(channelId);
+    setActiveView("chat");
+  }
+
+  async function handleClearAssistantRequest(prompt) {
+    const response = await clearAiApi.assist(buildClearAssistantRequest(prompt));
+
+    if (
+      (response.action?.type === "startDirectCall" || response.action?.type === "startVideoCall") &&
+      response.action.targetUserId
+    ) {
+      await handleStartDirectCall(response.action.targetUserId);
+      return response;
+    }
+
+    if (response.action?.type === "openDirectConversation" && response.action.targetUserId) {
+      await handleStartDirectChat(response.action.targetUserId);
+      return response;
+    }
+
+    if (
+      (response.action?.type === "openTextChannel" || response.action?.type === "composeChannelMessage") &&
+      response.action.serverId &&
+      response.action.channelId
+    ) {
+      await handleOpenAssistantTextChannel(response.action.serverId, response.action.channelId);
+      return response;
+    }
+
+    return response;
+  }
+
+  async function handleFinalizeClearAssistantDraft(session, content) {
+    if (session.kind === "direct" && session.targetUserId) {
+      const conversation = await handleStartDirectChat(session.targetUserId);
+      await chatSignalR.sendDirectMessage({
+        directConversationId: conversation.id,
+        content,
+        replyToMessageId: null
+      });
+
+      return {
+        message:
+          language === "vi"
+            ? `Mình đã gửi tin nhắn cho ${session.targetDisplayName}: "${content}"`
+            : `I sent the message to ${session.targetDisplayName}: "${content}"`,
+        mode: "send-direct-message",
+        usedExternalModel: false,
+        action: null
+      };
+    }
+
+    if (session.kind === "channel" && session.contextId) {
+      await chatSignalR.sendMessage({
+        channelId: session.contextId,
+        content,
+        replyToMessageId: null
+      });
+
+      return {
+        message:
+          language === "vi"
+            ? `Mình đã gửi vào #${session.targetDisplayName}: "${content}"`
+            : `I sent the message to #${session.targetDisplayName}: "${content}"`,
+        mode: "send-channel-message",
+        usedExternalModel: false,
+        action: null
+      };
+    }
+
+    throw new Error(language === "vi" ? "Phiên soạn tin nhắn không hợp lệ." : "The message drafting session is invalid.");
+  }
 
   async function handleSendMessage({ content, files, replyToMessageId }) {
     setSendError("");
@@ -986,6 +1224,7 @@ function ChatPage({
         return [conversation, ...withoutCurrent];
       });
       setActiveView("friends");
+      return conversation;
     } catch (error) {
       setSocialError(error.message);
       setMessageError(error.message);
@@ -1045,23 +1284,29 @@ function ChatPage({
 
   async function handleSendFriendRequest(targetUserId) {
     await friendApi.sendRequest(targetUserId);
-    await refreshFriendsAndRequests();
+    await refreshFriendsAndRequests({ force: true });
     setSearchResults((current) => current.filter((user) => user.id !== targetUserId));
   }
 
   async function handleAcceptRequest(requestId) {
     await friendApi.acceptRequest(requestId);
-    await refreshFriendsAndRequests();
+    setNotifications((current) =>
+      markRelatedNotificationsRead(current, "FriendRequest", requestId)
+    );
+    await refreshFriendsAndRequests({ force: true });
   }
 
   async function handleRejectRequest(requestId) {
     await friendApi.rejectRequest(requestId);
-    await refreshFriendsAndRequests();
+    setNotifications((current) =>
+      markRelatedNotificationsRead(current, "FriendRequest", requestId)
+    );
+    await refreshFriendsAndRequests({ force: true });
   }
 
   async function handleUnfriend(friendUserId) {
     await friendApi.unfriend(friendUserId);
-    await refreshFriendsAndRequests();
+    await refreshFriendsAndRequests({ force: true });
   }
 
   async function handleMarkNotificationRead(notificationId) {
@@ -1090,7 +1335,7 @@ function ChatPage({
     const relatedEntityType = notification.relatedEntityType?.toLowerCase() ?? "";
 
     if (relatedEntityType === "friendrequest") {
-      await refreshFriendsAndRequests();
+      await refreshFriendsAndRequests({ force: true });
       setActiveView("friends");
       return;
     }
@@ -1194,6 +1439,10 @@ function ChatPage({
             onSelectServer={handleSelectServer}
             onOpenCreateServer={() => setIsCreateServerVisible(true)}
             onOpenJoinServer={() => setIsJoinServerVisible(true)}
+            isClearEnabled={isClearEnabled}
+            notificationVolume={notificationVolume}
+            onClearEnabledChange={setIsClearEnabled}
+            onNotificationVolumeChange={setNotificationVolume}
             onOpenProfile={() => setActiveView("profile")}
             onLogout={onLogout}
           />
@@ -1355,6 +1604,16 @@ function ChatPage({
               onOpenFriends={() => setActiveView("friends")}
             />
           ) : null}
+          {!shouldShowVoiceWorkspace && (
+              <ClearAssistantPanel
+                currentContextLabel={clearAssistantContextLabel}
+                isOpen={isClearAssistantOpen}
+                isClearEnabled={isClearEnabled}
+                onOpenChange={setIsClearAssistantOpen}
+                onAssistRequest={handleClearAssistantRequest}
+                onFinalizeDraftMessage={handleFinalizeClearAssistantDraft}
+              />
+            )}
         </div>
 
         {directPeer ? (

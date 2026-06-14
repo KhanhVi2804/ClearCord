@@ -30,6 +30,7 @@ builder.Logging.AddDebug();
 builder.Logging.AddEventSourceLogger();
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
+builder.Services.Configure<ClearAiSettings>(builder.Configuration.GetSection(ClearAiSettings.SectionName));
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -121,6 +122,7 @@ builder.Services.AddSignalR()
     });
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<ApplicationDbContext>());
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -148,6 +150,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IVoiceService, VoiceService>();
 builder.Services.AddScoped<IDirectVoiceService, DirectVoiceService>();
 builder.Services.AddScoped<IConnectionService, ConnectionService>();
+builder.Services.AddScoped<IClearAiService, ClearAiService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
 
@@ -176,6 +179,8 @@ app.MapFallbackToFile("client/index.html");
 
 using (var scope = app.Services.CreateScope())
 {
+    LocalDbBootstrapper.EnsureStarted(builder.Configuration.GetConnectionString("DefaultConnection"));
+
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     try
     {
@@ -188,6 +193,27 @@ using (var scope = app.Services.CreateScope())
             $"Database '{databaseName}' already contains legacy tables that do not match the current EF Core migration history. " +
             "Point 'ConnectionStrings:DefaultConnection' to a fresh database name or delete the old schema before starting the app.",
             exception);
+    }
+
+    var staleConnections = await dbContext.UserConnections.ToListAsync();
+    if (staleConnections.Count > 0)
+    {
+        dbContext.UserConnections.RemoveRange(staleConnections);
+    }
+
+    var usersMarkedOnline = await dbContext.Users
+        .Where(user => user.IsOnline)
+        .ToListAsync();
+
+    foreach (var user in usersMarkedOnline)
+    {
+        user.IsOnline = false;
+        user.LastSeenAt = DateTimeOffset.UtcNow;
+    }
+
+    if (staleConnections.Count > 0 || usersMarkedOnline.Count > 0)
+    {
+        await dbContext.SaveChangesAsync();
     }
 }
 
